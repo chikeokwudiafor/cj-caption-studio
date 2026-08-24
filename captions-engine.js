@@ -230,11 +230,23 @@
       name: 'Custom', backdrop: 'none',
       fields: [],
       render(ctx, env) {
-        const { W, H, u, brand, t, clip, opts } = env;
+        const { W, H, u, brand, t, absT, clip, opts } = env;
         const rects = {};
         (clip.custom || []).forEach((b, i) => {
           ctx.save();
-          if (ent(ctx, t - 0.1 - i * 0.12, 24, u)) {
+          // A box may carry its own appear/disappear times, in clip seconds.
+          // Without them it falls back to the staggered entrance.
+          let shown;
+          if (b.start != null || b.end != null) {
+            const s0 = b.start || 0;
+            const lt = (absT == null ? t : absT) - s0;
+            const endA = (b.end != null && b.end > s0) ? clamp01((b.end - (absT == null ? t : absT)) / 0.35) : 1;
+            if (endA <= 0) shown = false;
+            else { ctx.globalAlpha *= endA; shown = ent(ctx, lt, 24, u); }
+          } else {
+            shown = ent(ctx, t - 0.1 - i * 0.12, 24, u);
+          }
+          if (shown) {
             const size = b.size * u;
             const lay = layoutText(ctx, b.text, W * 0.92, size, b.font, { maxLines: 6, minSize: 10, lineHeight: 1.08 });
             const x = b.x * W, y = b.y * H - lay.height / 2;
@@ -275,7 +287,7 @@
       ctx.globalAlpha *= clamp01(t / 0.4);
     }
     if (off && clip.template !== 'custom') ctx.translate(off.x * W, off.y * H);
-    tpl.render(ctx, { W, H, u, brand, vals: clip.vals || {}, t, clip, opts });
+    tpl.render(ctx, { W, H, u, brand, vals: clip.vals || {}, t, absT: time, clip, opts });
     ctx.restore();
   }
 

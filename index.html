@@ -13,11 +13,10 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="./styles.css?v=4">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Oswald:wght@500;600&family=Space+Grotesk:wght@400;500;700&display=swap">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Oswald:wght@500;600&family=Space+Grotesk:wght@400;500;700&display=swap"></noscript>
+<link rel="stylesheet" href="./styles.css?v=5">
+<link rel="stylesheet" href="./fonts.css?v=5">
+<link rel="preload" as="font" type="font/woff2" href="./fonts/anton-400-latin.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="./fonts/space-grotesk-400-latin.woff2" crossorigin>
 </head>
 <body>
 
@@ -93,6 +92,8 @@
             <button class="btn" id="rotateBtn">&#10227; Rotate</button>
             <button class="btn ghost" id="resetPosBtn">Reset text position</button>
           </div>
+          <button class="btn" id="safeBtn" aria-pressed="false" style="margin-top:10px;">Show safe zones</button>
+          <p class="hint">Safe zones mark where Instagram and TikTok put their own buttons and captions. Keep text inside the clear area. Guides are preview-only — they never export.</p>
         </section>
       </div>
 
@@ -119,6 +120,15 @@
             <div class="chips" id="boxFonts"></div>
             <span class="lbl" style="margin-top:16px;">Colour</span>
             <div class="swatches" id="boxColors"></div>
+            <span class="lbl" style="margin-top:18px;">This box's timing</span>
+            <div class="split2">
+              <label class="field"><span>Appears at (s)</span><input type="number" id="boxStart" min="0" step="0.1" inputmode="decimal" placeholder="with clip"></label>
+              <label class="field"><span>Gone at (s)</span><input type="number" id="boxEnd" min="0" step="0.1" inputmode="decimal" placeholder="clip end"></label>
+            </div>
+            <div class="split2">
+              <button class="btn" id="boxStartNow">&#8676; Start at playhead</button>
+              <button class="btn" id="boxEndNow">End at playhead &#8677;</button>
+            </div>
             <button class="btn ghost" id="delBox" style="margin-top:16px;">Delete this box</button>
           </div>
           <p class="hint">Drag text on the preview to move it.</p>
@@ -165,6 +175,7 @@
             <button class="btn ghost" id="removeClip">Remove</button>
           </div>
           <p class="hint">Drag along the timeline to scrub. The order here is the order clips export in.</p>
+          <button class="btn ghost" id="startOver" style="margin-top:12px;">Clear this session</button>
         </section>
       </div>
 
@@ -173,8 +184,10 @@
         <section class="grp">
           <span class="lbl">What to export</span>
           <div class="chips row" id="scopeChips"></div>
-          <span class="lbl" style="margin-top:16px;">Format</span>
-          <div class="chips row" id="formatChips"></div>
+          <div id="formatGrp">
+            <span class="lbl" style="margin-top:16px;">Format</span>
+            <div class="chips row" id="formatChips"></div>
+          </div>
           <span class="lbl" style="margin-top:16px;">Quality</span>
           <div class="chips row" id="qualityChips"></div>
           <button class="btn primary" id="exportBtn" style="margin-top:18px;">EXPORT CLIP</button>
@@ -218,7 +231,9 @@
 
 </div>
 
-<script src="./captions-engine.js?v=2"></script>
-<script src="./app.js?v=4"></script>
+<script src="./store.js?v=5"></script>
+<script src="./captions-engine.js?v=5"></script>
+<script src="./mp4-export.js?v=5"></script>
+<script src="./app.js?v=5"></script>
 </body>
 </html>

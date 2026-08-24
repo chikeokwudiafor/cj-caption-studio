@@ -36,8 +36,8 @@
     aspect: '9:16',
     playing: false, time: 0,
     brand: loadBrand(),
-    quality: 'high', format: null, scope: 'one',
-    exporting: false, pct: 0,
+    quality: 'high', format: null, scope: 'one', safe: false,
+    exporting: false, pct: 0, fast: null,
     exportUrl: null, exportName: '', exportSize: '',
     tab: null
   };
@@ -47,10 +47,10 @@
    'rail','addBtn','fileInput','sheet','sheetTitle','sheetClose','sheetGrow','tabbar',
    'tplChips','tplHint','bdChips','bdOpacityRow','bdOpacity','bdOpacityOut','rotateBtn','resetPosBtn',
    'fieldsGrp','fieldsLbl','fields','boxesGrp','boxChips','boxEditor','boxText','boxSize','boxSizeOut',
-   'boxFonts','boxColors','delBox','tStart','tEnd','animChips','dupNext',
+   'boxFonts','boxColors','delBox','boxStart','boxEnd','boxStartNow','boxEndNow','safeBtn','tStart','tEnd','animChips','dupNext',
    'trimLbl','trimbar','cutL','cutR','keepBox','trimPh','trimL','trimR','setStart','setEnd','splitBtn','resetTrim',
-   'moveL','moveR','removeClip',
-   'scopeChips','formatChips','qualityChips','exportBtn','exportProgress','exportBar','exportPctText','exportDl','saveHint','formatNote',
+   'moveL','moveR','removeClip','startOver',
+   'scopeChips','formatGrp','formatChips','qualityChips','exportBtn','exportProgress','exportBar','exportPctText','exportDl','saveHint','formatNote',
    'cBlack','cGold','cAccent','bHandles','headFonts','bodyFonts','resetBrand'
   ].forEach(function (k) { el[k] = $(k); });
 
@@ -68,6 +68,91 @@
     return null;
   };
   var idxOf = function (id) { for (var i = 0; i < state.clips.length; i++) if (state.clips[i].id === id) return i; return -1; };
+
+  // ---------------------------------------------------------------- persistence
+
+  var storeOk = !!window.Store;
+  var saveTimer = 0;
+  var restoring = false;
+
+  // Everything except the video bytes, which live in IndexedDB under the clip id.
+  function projectSnapshot() {
+    return {
+      v: 1,
+      aspect: state.aspect, sel: state.sel, quality: state.quality,
+      scope: state.scope, safe: state.safe, brand: state.brand,
+      clips: state.clips.map(function (c) {
+        return {
+          id: c.id, name: c.name, duration: c.duration, thumb: c.thumb,
+          trimStart: c.trimStart, trimEnd: c.trimEnd,
+          template: c.template, templates: c.templates,
+          valsByTpl: c.valsByTpl, tplOffset: c.tplOffset,
+          rotate: c.rotate, backdrop: c.backdrop, backdropOpacity: c.backdropOpacity,
+          timing: c.timing, custom: c.custom
+        };
+      })
+    };
+  }
+
+  function persist() {
+    if (!storeOk || restoring) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      window.Store.saveProject(projectSnapshot()).catch(function (e) {
+        storeOk = false;
+        toast('Could not save this session — your work will be lost on reload.', 'err');
+        console.warn('persist failed', e);
+      });
+    }, 700);
+  }
+
+  function restore() {
+    if (!storeOk) return Promise.resolve(false);
+    return Promise.all([window.Store.loadProject(), window.Store.getClips()])
+      .then(function (r) {
+        var proj = r[0], blobs = r[1];
+        if (!proj || !proj.clips || !proj.clips.length) return false;
+        var byId = {};
+        blobs.forEach(function (b) { byId[b.id] = b; });
+
+        restoring = true;
+        var restored = proj.clips.filter(function (c) { return byId[c.id]; }).map(function (c) {
+          return Object.assign({}, c, { url: URL.createObjectURL(byId[c.id].blob) });
+        });
+        if (!restored.length) { restoring = false; return false; }
+
+        state.clips = restored;
+        state.aspect = proj.aspect || state.aspect;
+        state.quality = proj.quality || state.quality;
+        state.scope = proj.scope || state.scope;
+        state.safe = !!proj.safe;
+        if (proj.brand) { state.brand = Object.assign({}, DEF_BRAND, proj.brand); }
+        var wanted = restored.filter(function (c) { return c.id === proj.sel; })[0] || restored[0];
+        restoring = false;
+        selectClip(wanted.id, { play: false });
+        return true;
+      })
+      .catch(function (e) { console.warn('restore failed', e); return false; });
+  }
+
+  function startOver() {
+    state.clips.forEach(function (c) { try { URL.revokeObjectURL(c.url); } catch (e) {} });
+    state.clips = [];
+    state.sel = null;
+    state.selBox = null;
+    clearExport();
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    if (storeOk) window.Store.clear().catch(function () {});
+    state.tab = null;
+    el.sheet.dataset.open = isDesktop() ? '1' : '0';
+    el.app.dataset.sheet = '0';
+    render();
+    requestDraw();
+    sizeStage();
+    toast('Cleared. Add clips to start again.');
+  }
 
   // ---------------------------------------------------------------- toast
 
@@ -168,6 +253,31 @@
     var opts = { selectedBox: state.selBox, editing: clip.template === 'custom', rectsOut: {} };
     E.renderAll(ctx, canvas.width, canvas.height, resolvedClip(clip), state.brand, t, opts);
     hitRects = opts.rectsOut || {};
+    if (state.safe) drawSafeZones();
+  }
+
+  // Where Instagram and TikTok paint their own UI over your video. Preview only.
+  var SAFE = {
+    '9:16': { top: 0.11, bottom: 0.21, left: 0.05, right: 0.13 },
+    '1:1':  { top: 0.06, bottom: 0.08, left: 0.05, right: 0.05 },
+    '16:9': { top: 0.06, bottom: 0.08, left: 0.05, right: 0.05 }
+  };
+  function drawSafeZones() {
+    var z = SAFE[state.aspect] || SAFE['9:16'];
+    var w = canvas.width, h = canvas.height;
+    var x0 = w * z.left, x1 = w * (1 - z.right);
+    var y0 = h * z.top, y1 = h * (1 - z.bottom);
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,75,46,0.16)';
+    ctx.fillRect(0, 0, w, y0);
+    ctx.fillRect(0, y1, w, h - y1);
+    ctx.fillRect(0, y0, x0, y1 - y0);
+    ctx.fillRect(x1, y0, w - x1, y1 - y0);
+    ctx.strokeStyle = 'rgba(232,179,75,0.9)';
+    ctx.lineWidth = Math.max(1, w / 400);
+    ctx.setLineDash([w / 60, w / 90]);
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.restore();
   }
 
   function updatePlayhead() {
@@ -223,6 +333,15 @@
     });
     var first = state.clips.length === 0;
     state.clips = state.clips.concat(added);
+    if (storeOk) {
+      added.forEach(function (c, i) {
+        window.Store.putClip(c.id, files[i]).catch(function (e) {
+          storeOk = false;
+          toast('This device would not store the clips, so the session will not survive a reload.', 'err');
+          console.warn('putClip failed', e);
+        });
+      });
+    }
     if (!state.sel) selectClip(added[0].id, { play: false });
     render();
     added.forEach(function (c) {
@@ -284,6 +403,7 @@
     var shared = state.clips.some(function (x) { return x.id !== id && x.url === c.url; });
     if (!shared) URL.revokeObjectURL(c.url);
     state.clips = state.clips.filter(function (x) { return x.id !== id; });
+    if (storeOk) window.Store.deleteClip(id).catch(function () {});
     if (state.sel === id) {
       state.sel = null;
       video.pause();
@@ -461,6 +581,8 @@
     if (has && document.activeElement !== el.bdOpacity) el.bdOpacity.value = String(clip.backdropOpacity != null ? clip.backdropOpacity : 100);
     el.bdOpacityOut.textContent = el.bdOpacity.value + '%';
 
+    el.safeBtn.setAttribute('aria-pressed', state.safe ? 'true' : 'false');
+    el.safeBtn.textContent = state.safe ? 'Hide safe zones' : 'Show safe zones';
     el.rotateBtn.disabled = !has;
     el.rotateBtn.textContent = '⟳ Rotate' + (has && clip.rotate ? ' (' + clip.rotate * 90 + '°)' : '');
     var offs = has && clip.tplOffset && clip.tplOffset[clip.template];
@@ -513,7 +635,15 @@
       var boxes = clip.custom || [];
       var chips = boxes.map(function (b, i) {
         return chipButton((String(b.text || 'Text').split('\n')[0] || ('Text ' + (i + 1))).slice(0, 18),
-          b.id === state.selBox, function () { state.selBox = b.id; render(); requestDraw(); });
+          b.id === state.selBox, function () {
+            state.selBox = b.id;
+            // If this box is timed to appear later, jump there so it is editable.
+            if (b.start != null && video.currentTime < b.start) {
+              video.currentTime = b.start + 0.35;
+              state.time = video.currentTime;
+            }
+            render(); requestDraw();
+          });
       });
       var addBox = chipButton('+ Text box', false, function () {
         var b = newBox();
@@ -537,6 +667,8 @@
         fill(el.boxFonts, FONTS_HEAD.concat(['Space Grotesk']).map(function (n) {
           return chipButton(n, sb.font === n, function () { sb.font = n; render(); requestDraw(); }, { font: n });
         }));
+        if (document.activeElement !== el.boxStart) el.boxStart.value = sb.start != null ? String(sb.start) : '';
+        if (document.activeElement !== el.boxEnd) el.boxEnd.value = sb.end != null ? String(sb.end) : '';
         fill(el.boxColors, ['#FFFFFF', brand.gold, brand.accent, brand.black].map(function (c) {
           var b = document.createElement('button');
           b.type = 'button';
@@ -588,16 +720,20 @@
         { disabled: p[0] === 'all' && state.clips.length < 2 });
     }));
     var defFormat = defaultFormat();
-    fill(el.formatChips, ['mp4', 'webm-vp9', 'webm-vp8'].map(function (id) {
-      var ok = !!(E && E.supportedMime(id));
-      var label = id === 'mp4' ? 'MP4' : (id === 'webm-vp9' ? 'WebM VP9' : 'WebM VP8');
-      return chipButton(label, (state.format || defFormat) === id, function () { state.format = id; render(); },
-        { disabled: !ok, title: ok ? '' : 'This browser cannot record ' + label });
-    }));
+    var fast = state.fast && state.fast.ok;
+    el.formatGrp.hidden = fast;   // the fast encoder always writes MP4
+    if (!fast) {
+      fill(el.formatChips, ['mp4', 'webm-vp9', 'webm-vp8'].map(function (id) {
+        var ok = !!(E && E.supportedMime(id));
+        var label = id === 'mp4' ? 'MP4' : (id === 'webm-vp9' ? 'WebM VP9' : 'WebM VP8');
+        return chipButton(label, (state.format || defFormat) === id, function () { state.format = id; render(); },
+          { disabled: !ok, title: ok ? '' : 'This browser cannot record ' + label });
+      }));
+    }
     fill(el.qualityChips, [['standard', 'Standard'], ['high', 'High'], ['max', 'Max']].map(function (p) {
       return chipButton(p[1], state.quality === p[0], function () { state.quality = p[0]; render(); });
     }));
-    el.exportBtn.disabled = !has || state.exporting || !defFormat;
+    el.exportBtn.disabled = !has || state.exporting || !(defFormat || fast);
     el.exportBtn.textContent = state.exporting ? 'EXPORTING…' : (state.scope === 'all' && state.clips.length > 1 ? 'EXPORT ' + state.clips.length + ' CLIPS' : 'EXPORT CLIP');
     el.exportProgress.hidden = !state.exporting;
     el.exportBar.style.width = state.pct + '%';
@@ -634,11 +770,16 @@
   }
   function formatNote() {
     if (!E) return '';
+    if (state.fast && state.fast.ok) {
+      return state.fast.audio
+        ? 'MP4 (H.264 + AAC), ready for Instagram and TikTok. Encoded as fast as this device manages — usually several times quicker than the clip is long — and it keeps going if you switch apps.'
+        : 'MP4 (H.264), ready for Instagram and TikTok. This device cannot encode audio, so exports come out silent.';
+    }
     if (!window.MediaRecorder || !document.createElement('canvas').captureStream) {
-      return 'This browser cannot record video. On iPhone, update to iOS 15 or later, or open this page in Safari or Chrome.';
+      return 'This browser cannot export video. On iPhone, update to iOS 15 or later, or open this page in Safari or Chrome.';
     }
     if (E.supportedMime('mp4')) {
-      return 'MP4 (H.264) uploads straight to Instagram and TikTok. Export runs in real time, so a 30s clip takes about 30s — keep this tab in front.';
+      return 'MP4 (H.264) uploads straight to Instagram and TikTok. This browser has no fast encoder, so export records in real time — a 30s clip takes about 30s, and this tab has to stay in front.';
     }
     return 'This browser can only record WebM, which Instagram and TikTok may reject. Export from Chrome, or from Safari on iOS 17.4+, to get MP4.';
   }
@@ -651,6 +792,7 @@
   }
 
   function render() {
+    persist();
     var has = !!cur();
     el.empty.hidden = has;
     el.frame.style.visibility = 'visible';
@@ -696,27 +838,91 @@
     return bytes >= 1e6 ? (bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1e3)) + ' KB';
   }
 
-  function doExport() {
+  function exportItems() {
     var clip = cur();
-    if (!clip || !E || state.exporting) return;
-    var fmtId = defaultFormat();
-    if (!fmtId) { toast('This browser cannot record video.', 'err'); return; }
+    var all = state.scope === 'all' && state.clips.length > 1;
+    return {
+      all: all,
+      clip: clip,
+      items: (all ? state.clips : [clip]).map(function (c) { return { src: c.url, clip: resolvedClip(c) }; })
+    };
+  }
+
+  function expectedSeconds(items) {
+    return items.reduce(function (a, it) {
+      var c = it.clip, st = c.trimStart || 0;
+      var en = (c.trimEnd && c.trimEnd > st) ? c.trimEnd : (c.duration || 0);
+      return a + Math.max(0.1, en - st);
+    }, 0);
+  }
+
+  function setPct(p, label) {
+    var pct = Math.round(p * 100);
+    if (pct === state.pct) return;
+    state.pct = pct;
+    el.exportBar.style.width = pct + '%';
+    el.exportPctText.textContent = label + ' ' + pct + '%';
+  }
+
+  function finishExport(blob, ext, all, clip) {
+    state.exporting = false;
+    state.exportUrl = URL.createObjectURL(blob);
+    var base = all ? ('joined-' + state.clips.length + '-clips')
+                   : String(clip.name).replace(/\.[^.]+$/, '') + '-captioned';
+    state.exportName = base.replace(/[^\w\-. ]+/g, '_') + '.' + (ext || 'mp4');
+    state.exportSize = fileSize(blob.size);
+    render();
+  }
+
+  function doExport() {
+    if (!E || state.exporting) return;
+    var plan = exportItems();
+    if (!plan.clip) return;
     video.pause();
     clearExport();
     state.exporting = true; state.pct = 0;
     render();
 
-    var all = state.scope === 'all' && state.clips.length > 1;
-    var items = (all ? state.clips : [clip]).map(function (c) { return { src: c.url, clip: resolvedClip(c) }; });
-    var expected = items.reduce(function (a, it) {
-      var c = it.clip, st = c.trimStart || 0;
-      var en = (c.trimEnd && c.trimEnd > st) ? c.trimEnd : (c.duration || 0);
-      return a + Math.max(0.1, en - st);
-    }, 0);
+    var expected = expectedSeconds(plan.items);
+    var useFast = state.fast && state.fast.ok;
 
-    // Recording is real time and frame-driven, so a backgrounded tab or a sleeping
-    // screen silently truncates the file. Hold the screen awake and, if we lost
-    // visibility anyway, say so rather than handing over a broken clip.
+    if (useFast) {
+      // WebCodecs: encodes as fast as the device manages and does not depend on
+      // the tab staying visible.
+      window.FastExport.exportSequence({
+        items: plan.items, brand: state.brand, aspect: state.aspect, quality: state.quality,
+        onProgress: function (p) { setPct(p, 'Encoding…'); }
+      }).then(function (res) {
+        // The muxer is ours, so never hand over a file we have not decoded back.
+        return window.FastExport.verify(res.blob, expected).then(function (v) {
+          if (!v.ok) throw new Error('verify: ' + v.why);
+          finishExport(res.blob, res.ext, plan.all, plan.clip);
+          toast(res.hasAudio ? 'Done. Tap Save to keep it.' : 'Done — no audio track was found, so this one is silent.');
+        });
+      }).catch(function (err) {
+        // Fall back rather than fail: slow and correct beats fast and broken.
+        console.warn('Fast export failed, falling back to recording:', err);
+        toast('Fast export did not work here — falling back to real-time recording.');
+        recordExport(plan, expected);
+      });
+      return;
+    }
+
+    recordExport(plan, expected);
+  }
+
+  // MediaRecorder path: real time, and truncated by a backgrounded tab.
+  function recordExport(plan, expected) {
+    var fmtId = defaultFormat();
+    if (!fmtId) {
+      state.exporting = false;
+      render();
+      toast('This browser cannot record video.', 'err');
+      return;
+    }
+    state.exporting = true;
+    render();
+
     var wentHidden = document.visibilityState === 'hidden';
     var onVis = function () { if (document.visibilityState === 'hidden') wentHidden = true; };
     document.addEventListener('visibilitychange', onVis);
@@ -731,25 +937,12 @@
     };
 
     E.exportSequence({
-      items: items, brand: state.brand, aspect: state.aspect,
+      items: plan.items, brand: state.brand, aspect: state.aspect,
       quality: state.quality, format: fmtId,
-      onProgress: function (p) {
-        var pct = Math.round(p * 100);
-        if (pct !== state.pct) {
-          state.pct = pct;
-          el.exportBar.style.width = pct + '%';
-          el.exportPctText.textContent = 'Burning in text… ' + pct + '%';
-        }
-      }
+      onProgress: function (p) { setPct(p, 'Recording…'); }
     }).then(function (res) {
       finishUp();
-      state.exporting = false;
-      state.exportUrl = URL.createObjectURL(res.blob);
-      var base = all ? ('joined-' + state.clips.length + '-clips') : String(clip.name).replace(/\.[^.]+$/, '') + '-captioned';
-      state.exportName = base.replace(/[^\w\-. ]+/g, '_') + '.' + (res.ext || 'webm');
-      state.exportSize = fileSize(res.blob.size);
-      render();
-      // ~40KB per second is far below anything a real 1080p recording produces.
+      finishExport(res.blob, res.ext, plan.all, plan.clip);
       var starved = res.blob.size < expected * 40000;
       if (wentHidden || starved) {
         toast('That export looks incomplete — recording stops when the tab is in the background or the screen sleeps. Check it, and re-export with this tab in front if it is short.', 'err');
@@ -934,6 +1127,32 @@
     var b = (c.custom || []).filter(function (x) { return x.id === state.selBox; })[0];
     if (b) { b.size = Number(el.boxSize.value); el.boxSizeOut.textContent = el.boxSize.value; requestDraw(); }
   });
+  function selBoxObj() {
+    var c = cur(); if (!c) return null;
+    return (c.custom || []).filter(function (x) { return x.id === state.selBox; })[0] || null;
+  }
+  function setBoxTiming(field, value) {
+    var b = selBoxObj(); if (!b) return;
+    b[field] = value;
+    render(); requestDraw();
+  }
+  el.boxStart.addEventListener('input', function () {
+    setBoxTiming('start', el.boxStart.value === '' ? null : Math.max(0, Number(el.boxStart.value) || 0));
+  });
+  el.boxEnd.addEventListener('input', function () {
+    setBoxTiming('end', el.boxEnd.value === '' ? null : Math.max(0, Number(el.boxEnd.value) || 0));
+  });
+  el.boxStartNow.addEventListener('click', function () {
+    setBoxTiming('start', Math.round(video.currentTime * 10) / 10);
+  });
+  el.boxEndNow.addEventListener('click', function () {
+    setBoxTiming('end', Math.round(video.currentTime * 10) / 10);
+  });
+  el.safeBtn.addEventListener('click', function () {
+    state.safe = !state.safe;
+    render(); requestDraw();
+  });
+
   el.delBox.addEventListener('click', function () {
     var c = cur(); if (!c) return;
     var rest = (c.custom || []).filter(function (x) { return x.id !== state.selBox; });
@@ -1034,6 +1253,10 @@
     render();
     toast('Split into two clips.');
   });
+  el.startOver.addEventListener('click', function () {
+    if (state.clips.length && !confirm('Remove every clip and start again?')) return;
+    startOver();
+  });
   el.moveL.addEventListener('click', function () { moveClip(-1); });
   el.moveR.addEventListener('click', function () { moveClip(1); });
   el.removeClip.addEventListener('click', function () {
@@ -1100,6 +1323,20 @@
   if (isDesktop()) {
     el.sheet.dataset.open = '1';
     Array.prototype.slice.call(el.sheet.querySelectorAll('.pane')).forEach(function (p) { p.dataset.active = '1'; });
+  }
+
+  if (window.FastExport && window.FastExport.present()) {
+    window.FastExport.support(state.aspect, state.quality).then(function (cap) {
+      state.fast = cap;
+      render();
+    }).catch(function () {});
+  }
+
+  if (storeOk) {
+    window.Store.requestPersistence().catch(function () {});
+    restore().then(function (did) {
+      if (did) { render(); sizeStage(); requestDraw(); toast('Picked up where you left off.'); }
+    });
   }
 
   render();

@@ -6,8 +6,38 @@
   const easeOut = p => 1 - Math.pow(1 - clamp01(p), 3);
   const fontStr = (name, px) => (WEIGHTS[name] || 700) + ' ' + px + 'px "' + name + '"';
 
+  // Safari only shipped roundRect in 16. Older iPhones still need to draw the CTA pill.
+  if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+      r = Math.min(typeof r === 'number' ? r : (r && r[0]) || 0, w / 2, h / 2);
+      this.moveTo(x + r, y);
+      this.arcTo(x + w, y, x + w, y + h, r);
+      this.arcTo(x + w, y + h, x, y + h, r);
+      this.arcTo(x, y + h, x, y, r);
+      this.arcTo(x, y, x + w, y, r);
+      this.closePath();
+      return this;
+    };
+  }
+
+  // Wrapping runs a measure-and-shrink loop, and every template calls it on every
+  // frame with identical arguments. Memoising turns that into one hash lookup.
+  const layoutCache = new Map();
+  function clearLayoutCache() { layoutCache.clear(); }
+
   function layoutText(ctx, text, maxW, size, font, opt) {
     opt = opt || {};
+    const key = text + '\u0000' + Math.round(maxW) + '\u0000' + Math.round(size * 10) + '\u0000' + font +
+      '\u0000' + (opt.maxLines || 4) + '\u0000' + (opt.minSize || 22) + '\u0000' + (opt.lineHeight || 1.04);
+    const hit = layoutCache.get(key);
+    if (hit) { ctx.font = fontStr(font, hit.size); return hit; }
+    const out = layoutTextUncached(ctx, text, maxW, size, font, opt);
+    if (layoutCache.size > 400) layoutCache.clear();
+    layoutCache.set(key, out);
+    return out;
+  }
+
+  function layoutTextUncached(ctx, text, maxW, size, font, opt) {
     const maxLines = opt.maxLines || 4, minSize = opt.minSize || 22, lh = opt.lineHeight || 1.04;
     let s = size;
     for (;;) {
@@ -347,14 +377,24 @@
   // items: [{ src, clip }] rendered back-to-back into one file
   async function exportSequence({ items, brand, aspect, quality, format, onProgress }) {
     const [W, H] = RES[aspect] || RES['9:16'];
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    await ac.resume();
-    const dest = ac.createMediaStreamDestination();
+    if (!window.MediaRecorder) throw new Error('This browser cannot record video (no MediaRecorder).');
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
+    if (!canvas.captureStream) throw new Error('This browser cannot capture the canvas. On iPhone this needs iOS 15 or later.');
     const ctx = canvas.getContext('2d');
     const stream = canvas.captureStream(30);
-    dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
+
+    // Audio is best-effort: a silent export beats a failed one.
+    let ac = null, dest = null;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        ac = new AC();
+        await ac.resume();
+        dest = ac.createMediaStreamDestination();
+        dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
+      }
+    } catch (e) { ac = null; dest = null; }
 
     const mime = supportedMime(format) || pickMime();
     let rec;
@@ -406,9 +446,15 @@
         const end = Math.min(dur, (clip.trimEnd && clip.trimEnd > start) ? clip.trimEnd : dur);
         v.currentTime = start;
         await new Promise(res => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 600); });
-        const srcNode = ac.createMediaElementSource(v);
-        srcNode.connect(dest);
-        cleanup.push(() => { try { srcNode.disconnect(); } catch (e) {} });
+        if (ac && dest) {
+          try {
+            const srcNode = ac.createMediaElementSource(v);
+            srcNode.connect(dest);
+            cleanup.push(() => { try { srcNode.disconnect(); } catch (e) {} });
+          } catch (e) { v.muted = true; }
+        } else {
+          v.muted = true;
+        }
 
         await new Promise((resolve, reject) => {
           let raf, ended = false;
@@ -439,7 +485,7 @@
       try { rec.stop(); } catch (e) {}
       await stopped;
       cleanup.forEach(fn => fn());
-      try { ac.close(); } catch (e) {}
+      try { if (ac) ac.close(); } catch (e) {}
     }
     if (recErr) throw new Error(recErr);
     if (!chunks.length) throw new Error('No video data was captured — try a different format.');
@@ -452,5 +498,5 @@
     return exportSequence({ items: [{ src, clip }], brand, aspect, quality, format, onProgress });
   }
 
-  window.CaptionEngine = { RES, TEMPLATES, FORMATS, supportedMime, renderOverlay, renderAll, drawVideoCover, probe, exportClip, exportSequence };
+  window.CaptionEngine = { RES, TEMPLATES, FORMATS, supportedMime, renderOverlay, renderAll, drawVideoCover, probe, exportClip, exportSequence, clearLayoutCache };
 })();

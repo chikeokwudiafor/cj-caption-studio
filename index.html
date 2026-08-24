@@ -1,910 +1,224 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="./support.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clip Captioner — The Village PGH</title>
+<meta name="description" content="Add branded captions to your clips and export for Instagram and TikTok. Everything runs in your browser — nothing uploads.">
+<meta name="theme-color" content="#0B0906">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Captioner">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="./styles.css?v=4">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Oswald:wght@500;600&family=Space+Grotesk:wght@400;500;700&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Oswald:wght@500;600&family=Space+Grotesk:wght@400;500;700&display=swap"></noscript>
 </head>
 <body>
-<x-dc>
-<helmet>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Oswald:wght@500;600&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <script src="./captions-engine.js"></script>
-  <style>
-    html, body { margin: 0; padding: 0; background: #0D0B08; }
-    a { color: #E8B34B; } a:hover { color: #FF4B2E; }
-    input, textarea, button, select { font-family: "Space Grotesk", sans-serif; }
-    input:focus, textarea:focus { outline: 1px solid #E8B34B; }
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-thumb { background: #2C2519; border-radius: 4px; }
-    input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #2C2519; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #E8B34B; cursor: pointer; }
-    input[type="color"] { -webkit-appearance: none; appearance: none; border: 1px solid #2C2519; border-radius: 6px; background: none; padding: 0; }
-    input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
-    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
-  </style>
-</helmet>
-<template id="__bundler_thumbnail" data-bg-color="#0D0B08">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-    <rect width="100" height="100" fill="#0D0B08"></rect>
-    <rect x="34" y="32" width="32" height="36" rx="5" fill="#FF4B2E"></rect>
-    <polygon points="45,42 45,58 58,50" fill="#0D0B08"></polygon>
-    <rect x="34" y="72" width="32" height="4" rx="2" fill="#E8B34B"></rect>
-  </svg>
-</template>
-<div onDrop="{{ onDrop }}" onDragOver="{{ onDragOver }}" style="display: flex; flex-direction: column; height: {{ rootH }}; background: #0D0B08; color: #F2ECDD; font-family: 'Space Grotesk', sans-serif; font-size: 14px; overflow: hidden;">
-  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px; border-bottom: 1px solid #241E13; flex: none;">
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <div style="width: 30px; height: 30px; background: #FF4B2E; display: grid; place-items: center; font-family: Anton, sans-serif; font-size: 16px; color: #131008; border-radius: 4px;">V</div>
-      <div>
-        <div style="font-family: Anton, sans-serif; font-size: 17px; letter-spacing: 0.04em; line-height: 1;">CLIP CAPTIONER</div>
-        <div style="font-size: 10px; letter-spacing: 0.22em; color: #9A8F78; margin-top: 3px;">THE VILLAGE PGH × FTK</div>
-      </div>
+
+<div class="app" id="app">
+
+  <header class="topbar">
+    <div class="mark" aria-hidden="true">V</div>
+    <div class="wordmark">
+      <b>CLIP CAPTIONER</b>
+      <span>THE VILLAGE PGH &times; FTK</span>
     </div>
-    <div style="flex: 1;"></div>
-    <div style="display: flex; gap: 6px; align-items: center;">
-      <span style="font-size: 11px; color: #9A8F78; letter-spacing: 0.14em; margin-right: 4px;">FRAME</span>
-      <sc-for list="{{ aspects }}" as="a" hint-placeholder-count="3">
-        <button onClick="{{ a.onPick }}" style="cursor: pointer; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; background: {{ a.bg }}; color: {{ a.fg }}; border: 1px solid {{ a.bd }};">{{ a.label }}</button>
-      </sc-for>
-    </div>
+    <div class="spacer"></div>
+    <div class="seg" id="aspectSeg" role="group" aria-label="Frame ratio"></div>
   </header>
-  <div style="display: flex; flex-direction: {{ bodyDir }}; flex: 1; min-height: 0; overflow-y: {{ bodyOverflow }}; -webkit-overflow-scrolling: touch;">
-    <aside style="width: {{ clipsW }}; box-sizing: border-box; order: {{ clipsOrder }}; flex: none; border-right: 1px solid #241E13; border-bottom: 1px solid #241E13; display: flex; flex-direction: column; min-height: 0;">
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px 14px;">
-        <span style="font-size: 11px; letter-spacing: 0.2em; color: #9A8F78;">CLIPS</span>
-        <button onClick="{{ onAddClick }}" style="cursor: pointer; background: #E8B34B; color: #131008; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700;">+ Add</button>
-      </div>
-      <input ref="{{ fileRef }}" type="file" accept="video/*" multiple onChange="{{ onFiles }}" style="display: none;">
-      <div style="flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 4px 10px 10px 10px; display: flex; flex-direction: {{ clipListDir }}; gap: 8px;">
-        <sc-if value="{{ hasClips }}" hint-placeholder-val="{{ false }}">
-          <sc-for list="{{ clips }}" as="c" hint-placeholder-count="0">
-            <div onClick="{{ c.onSelect }}" style="cursor: pointer; flex: none; width: {{ clipCardW }}; border: 1px solid {{ c.bd }}; border-radius: 8px; overflow: hidden; background: #14110C; position: relative;">
-              <sc-if value="{{ c.thumb }}" hint-placeholder-val="{{ false }}">
-                <div style="width: 100%; height: 96px; background-size: cover; background-position: center; background-image: {{ c.bgImg }};"></div>
-              </sc-if>
-              <sc-if value="{{ c.noThumb }}" hint-placeholder-val="{{ true }}">
-                <div style="height: 96px; display: grid; place-items: center; color: #6B6250; font-size: 11px; background: #171310;">loading…</div>
-              </sc-if>
-              <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px;">
-                <span style="flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{ c.nameColor }};">{{ c.name }}</span>
-                <span style="font-size: 10px; color: #9A8F78;">{{ c.dur }}</span>
-              </div>
-              <button onClick="{{ c.onRemove }}" title="Remove clip" style="cursor: pointer; position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 5px; border: none; background: rgba(0,0,0,0.65); color: #C9BFA8; font-size: 12px; line-height: 1;">×</button>
-            </div>
-          </sc-for>
-        </sc-if>
-        <sc-if value="{{ noClips }}" hint-placeholder-val="{{ true }}">
-          <div style="border: 1px dashed #2C2519; border-radius: 8px; padding: 18px 12px; text-align: center; color: #9A8F78; font-size: 12px; line-height: 1.5; flex: none; min-width: 200px;">Drop video clips here or hit <strong style="color: #E8B34B;">+ Add</strong>.<br>Files stay in your browser — nothing uploads.</div>
-        </sc-if>
-      </div>
-    </aside>
-    <main style="flex: {{ mainFlex }}; height: {{ mainH }}; order: 1; min-width: 0; display: flex; flex-direction: column;">
-      <div ref="{{ stageAreaRef }}" style="flex: 1; min-height: 0; position: relative; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, #14110B 0%, #0B0906 75%);">
-        <div style="width: {{ stageW }}px; height: {{ stageH }}px; position: relative; background: #000; border-radius: 6px; overflow: hidden; box-shadow: 0 12px 44px rgba(0,0,0,0.6);">
-          <video ref="{{ videoRef }}" playsInline onPlay="{{ onVidPlay }}" onPause="{{ onVidPause }}" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: {{ vidOpacity }};"></video>
-          <canvas ref="{{ canvasRef }}" width="{{ canW }}" height="{{ canH }}" onPointerDown="{{ onCanvasDown }}" style="position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: {{ stageCursor }};"></canvas>
-          <sc-if value="{{ noSel }}" hint-placeholder-val="{{ true }}">
-            <div style="position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #9A8F78;">
-              <div>
-                <div style="font-family: Anton, sans-serif; font-size: 26px; color: #4A4232; letter-spacing: 0.04em;">DROP A CLIP TO START</div>
-                <div style="font-size: 12px; margin-top: 8px;">promo · lineup · recap — captioned in minutes</div>
-              </div>
-            </div>
-          </sc-if>
-        </div>
-      </div>
-      <div style="flex: none; padding: 10px 16px 12px 16px; border-top: 1px solid #241E13; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-width: 0; overflow: hidden;">
-        <button onClick="{{ onPlayToggle }}" style="cursor: pointer; width: 40px; height: 40px; border-radius: 50%; border: 1px solid #2C2519; background: #171310; color: #E8B34B; font-size: 14px; flex: none;">{{ playIcon }}</button>
-        <button onClick="{{ onTrimToggle }}" style="cursor: pointer; height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid {{ trimBtnBd }}; background: {{ trimBtnBg }}; color: {{ trimBtnFg }}; font-size: 12px; font-weight: 700; flex: none;">✂ Trim</button>
-        <button onClick="{{ onRotate }}" title="Rotate clip 90°" style="cursor: pointer; height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid {{ rotBd }}; background: #171310; color: {{ rotFg }}; font-size: 14px; font-weight: 700; flex: none;">⟳{{ rotLabel }}</button>
-        <span style="font-size: 12px; color: #9A8F78; font-variant-numeric: tabular-nums; flex: none;">{{ timeLabel }}</span>
-        <div ref="{{ timelineRef }}" onPointerDown="{{ onTimelineDown }}" style="flex: 1 1 200px; min-width: 200px; height: {{ tlH }}px; position: relative; cursor: pointer; touch-action: none; background: #12100B; border-radius: 8px; display: flex; gap: 2px; padding: 3px; box-sizing: border-box;">
-          <sc-for list="{{ segs }}" as="sg" hint-placeholder-count="2">
-            <div onPointerDown="{{ sg.onDown }}" style="position: relative; height: 100%; width: {{ sg.w }}%; min-width: 24px; flex: none; box-sizing: border-box; border: 2px solid {{ sg.bd }}; border-radius: 6px; overflow: hidden; background-color: #1C1710; background-image: {{ sg.bgImg }}; background-size: auto 100%; background-repeat: repeat-x; opacity: {{ sg.op }};">
-              <div style="position: absolute; left: 4px; bottom: 2px; font-size: 9px; font-weight: 700; color: #F2ECDD; text-shadow: 0 1px 3px #000; pointer-events: none;">{{ sg.dur }}</div>
-              <sc-if value="{{ sg.selected }}" hint-placeholder-val="{{ false }}">
-                <div onPointerDown="{{ sg.onTrimL }}" title="Trim start" style="position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: #E8B34B; cursor: ew-resize; display: grid; place-items: center; color: #131008; font-size: 9px; font-weight: 700;">❮</div>
-                <div onPointerDown="{{ sg.onTrimR }}" title="Trim end" style="position: absolute; right: 0; top: 0; bottom: 0; width: 14px; background: #E8B34B; cursor: ew-resize; display: grid; place-items: center; color: #131008; font-size: 9px; font-weight: 700;">❯</div>
-              </sc-if>
-            </div>
-          </sc-for>
-          <div ref="{{ playheadRef }}" style="position: absolute; top: 0; bottom: 0; width: 2px; background: #FF4B2E; left: 0%; pointer-events: none; box-shadow: 0 0 6px rgba(255,75,46,0.8);"></div>
-        </div>
-        <sc-if value="{{ trimMode }}" hint-placeholder-val="{{ false }}">
-          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%;">
-            <button onClick="{{ onSetTrimStart }}" style="cursor: pointer; height: 40px; padding: 0 14px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #171310; color: #E8B34B; border: 1px solid #2C2519;">⇤ Start here</button>
-            <button onClick="{{ onSetTrimEnd }}" style="cursor: pointer; height: 40px; padding: 0 14px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #171310; color: #E8B34B; border: 1px solid #2C2519;">End here ⇥</button>
-            <button onClick="{{ onSplit }}" style="cursor: pointer; height: 40px; padding: 0 14px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #171310; color: #F2ECDD; border: 1px solid #2C2519;">✂ Split here</button>
-            <button onClick="{{ onResetTrim }}" style="cursor: pointer; height: 40px; padding: 0 12px; border-radius: 8px; font-size: 12px; background: none; color: #9A8F78; border: 1px solid #2C2519;">Reset</button>
-            <span style="font-size: 11px; color: #9A8F78; font-variant-numeric: tabular-nums;">{{ trimLabel }}</span>
-          </div>
-        </sc-if>
-        <sc-if value="{{ showHints }}" hint-placeholder-val="{{ false }}">
-          <span style="font-size: 11px; color: #6B6250; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tap clip · drag to scrub · hold + drag to reorder · ❮❯ to trim</span>
-        </sc-if>
 
+  <div class="center">
+    <div class="stage" id="stage">
+      <div class="frame" id="frame">
+        <video id="video" playsinline webkit-playsinline muted preload="auto"></video>
+        <canvas id="canvas"></canvas>
       </div>
-    </main>
-    <aside style="width: {{ panelW }}; box-sizing: border-box; order: 3; flex: none; border-left: 1px solid #241E13; overflow-y: {{ panelOverflow }}; padding: 16px 16px 48px 16px; display: flex; flex-direction: column; gap: 22px;">
-      <section>
-        <div style="font-size: 11px; letter-spacing: 0.2em; color: #9A8F78; margin-bottom: 10px;">TEMPLATE LAYERS</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <sc-for list="{{ templates }}" as="t" hint-placeholder-count="5">
-            <button onClick="{{ t.onPick }}" style="cursor: pointer; padding: 10px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; text-align: left; background: {{ t.bg }}; color: {{ t.fg }}; border: 1px solid {{ t.bd }};">{{ t.name }}</button>
-          </sc-for>
+      <div class="empty" id="empty">
+        <div>
+          <h2>DROP A CLIP TO START</h2>
+          <p>promo &middot; lineup &middot; recap — captioned in minutes<br>Files stay on your phone. Nothing uploads.</p>
+          <button class="btn primary" id="emptyAdd" style="width:auto;padding:12px 26px;">Choose videos</button>
         </div>
-        <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
-          <div style="font-size: 11px; color: #6B6250; margin-top: 8px; line-height: 1.5;">Tap to stack layers on the clip — e.g. Recap watermark + Announcement. Tap the focused layer again to remove it.</div>
-          <div style="display: flex; align-items: center; gap: 6px; margin-top: 12px;">
-            <span style="font-size: 11px; color: #C9BFA8; flex: none;">Backdrop</span>
-            <sc-for list="{{ backdrops }}" as="bk" hint-placeholder-count="4">
-              <button onClick="{{ bk.onPick }}" style="cursor: pointer; flex: 1; padding: 7px 0; border-radius: 6px; font-size: 11px; font-weight: 700; background: {{ bk.bg }}; color: {{ bk.fg }}; border: 1px solid {{ bk.bd }};">{{ bk.label }}</button>
-            </sc-for>
-          </div>
-          <sc-if value="{{ hasBackdrop }}" hint-placeholder-val="{{ false }}">
-            <label style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-              <span style="font-size: 11px; color: #C9BFA8; flex: none;">Opacity</span>
-              <input type="range" min="0" max="100" step="5" value="{{ bdOpacity }}" onChange="{{ onBdOpacity }}" style="flex: 1;">
-              <span style="font-size: 11px; color: #9A8F78; width: 34px; text-align: right;">{{ bdOpacity }}%</span>
-            </label>
-          </sc-if>
-        </sc-if>
-      </section>
-      <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
-        <section>
-          <div style="font-size: 11px; letter-spacing: 0.2em; color: #9A8F78; margin-bottom: 10px;">TEXT — {{ focusName }}</div>
-          <sc-if value="{{ notCustom }}" hint-placeholder-val="{{ true }}">
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <sc-for list="{{ fields }}" as="f" hint-placeholder-count="3">
-                <label style="display: flex; flex-direction: column; gap: 5px;">
-                  <span style="font-size: 11px; color: #C9BFA8;">{{ f.label }}</span>
-                  <sc-if value="{{ f.multi }}" hint-placeholder-val="{{ false }}">
-                    <textarea rows="3" value="{{ f.value }}" onChange="{{ f.onChange }}" style="background: #12100B; border: 1px solid #2C2519; color: #F2ECDD; border-radius: 6px; padding: 8px 10px; font-size: 13px; resize: vertical;"></textarea>
-                  </sc-if>
-                  <sc-if value="{{ f.single }}" hint-placeholder-val="{{ true }}">
-                    <input type="text" value="{{ f.value }}" onChange="{{ f.onChange }}" style="background: #12100B; border: 1px solid #2C2519; color: #F2ECDD; border-radius: 6px; padding: 8px 10px; font-size: 13px;">
-                  </sc-if>
-                </label>
-              </sc-for>
-            </div>
-          </sc-if>
-          <sc-if value="{{ isCustom }}" hint-placeholder-val="{{ false }}">
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
-                <sc-for list="{{ boxes }}" as="b" hint-placeholder-count="1">
-                  <button onClick="{{ b.onSelect }}" style="cursor: pointer; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; background: {{ b.bg }}; color: {{ b.fg }}; border: 1px solid {{ b.bd }}; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ b.label }}</button>
-                </sc-for>
-                <button onClick="{{ onAddBox }}" style="cursor: pointer; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #171310; color: #E8B34B; border: 1px dashed #E8B34B;">+ Text</button>
-              </div>
-              <sc-if value="{{ hasSelBox }}" hint-placeholder-val="{{ false }}">
-                <textarea rows="2" value="{{ boxText }}" onChange="{{ onBoxText }}" style="background: #12100B; border: 1px solid #2C2519; color: #F2ECDD; border-radius: 6px; padding: 8px 10px; font-size: 13px; resize: vertical;"></textarea>
-                <label style="display: flex; align-items: center; gap: 10px;">
-                  <span style="font-size: 11px; color: #C9BFA8; width: 34px;">Size</span>
-                  <input type="range" min="24" max="220" step="2" value="{{ boxSize }}" onChange="{{ onBoxSize }}" style="flex: 1;">
-                  <span style="font-size: 11px; color: #9A8F78; width: 30px; text-align: right;">{{ boxSize }}</span>
-                </label>
-                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                  <sc-for list="{{ boxFonts }}" as="bf" hint-placeholder-count="3">
-                    <button onClick="{{ bf.onPick }}" style="cursor: pointer; padding: 6px 10px; border-radius: 6px; font-size: 11px; background: {{ bf.bg }}; color: {{ bf.fg }}; border: 1px solid {{ bf.bd }}; font-family: {{ bf.name }};">{{ bf.name }}</button>
-                  </sc-for>
-                </div>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                  <span style="font-size: 11px; color: #C9BFA8;">Color</span>
-                  <sc-for list="{{ boxColors }}" as="bc" hint-placeholder-count="4">
-                    <button onClick="{{ bc.onPick }}" title="{{ bc.c }}" style="cursor: pointer; width: 24px; height: 24px; border-radius: 50%; background: {{ bc.c }}; border: 2px solid {{ bc.bd }};"></button>
-                  </sc-for>
-                  <div style="flex: 1;"></div>
-                  <button onClick="{{ onRemoveBox }}" style="cursor: pointer; background: none; border: 1px solid #2C2519; color: #9A8F78; border-radius: 6px; padding: 5px 9px; font-size: 11px;">Delete box</button>
-                </div>
-                <div style="font-size: 11px; color: #6B6250;">Drag text directly on the preview to position it.</div>
-              </sc-if>
-            </div>
-          </sc-if>
-        </section>
-        <sc-if value="{{ notCustom }}" hint-placeholder-val="{{ false }}">
-          <div style="display: flex; align-items: center; gap: 10px; margin-top: -8px;">
-            <span style="font-size: 11px; color: #6B6250; flex: 1;">Drag on the preview to reposition the text.</span>
-            <sc-if value="{{ hasOffset }}" hint-placeholder-val="{{ false }}">
-              <button onClick="{{ onResetOffset }}" style="cursor: pointer; background: none; border: 1px solid #2C2519; color: #E8B34B; border-radius: 6px; padding: 5px 9px; font-size: 11px; flex: none;">Reset position</button>
-            </sc-if>
-          </div>
-        </sc-if>
-        <section>
-          <div style="font-size: 11px; letter-spacing: 0.2em; color: #9A8F78; margin-bottom: 10px;">TEXT TIMING</div>
-          <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
-              <span style="font-size: 11px; color: #C9BFA8;">Appears at (s)</span>
-              <input type="number" min="0" step="0.1" value="{{ tStart }}" onChange="{{ onTStart }}" style="background: #12100B; border: 1px solid #2C2519; color: #F2ECDD; border-radius: 6px; padding: 8px 10px; font-size: 13px; width: 100%; box-sizing: border-box;">
-            </label>
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
-              <span style="font-size: 11px; color: #C9BFA8;">Gone at (s)</span>
-              <input type="number" min="0" step="0.1" value="{{ tEnd }}" onChange="{{ onTEnd }}" placeholder="clip end" style="background: #12100B; border: 1px solid #2C2519; color: #F2ECDD; border-radius: 6px; padding: 8px 10px; font-size: 13px; width: 100%; box-sizing: border-box;">
-            </label>
-          </div>
-          <div style="display: flex; gap: 6px;">
-            <sc-for list="{{ anims }}" as="an" hint-placeholder-count="3">
-              <button onClick="{{ an.onPick }}" style="cursor: pointer; flex: 1; padding: 7px 0; border-radius: 6px; font-size: 12px; font-weight: 700; background: {{ an.bg }}; color: {{ an.fg }}; border: 1px solid {{ an.bd }};">{{ an.label }}</button>
-            </sc-for>
-          </div>
-        </section>
-        <button onClick="{{ onDupNext }}" style="cursor: pointer; padding: 10px 0; border-radius: 8px; font-size: 13px; font-weight: 700; background: #171310; color: {{ dupColor }}; border: 1px solid #2C2519;">Duplicate to next clip →</button>
-        <section>
-          <div style="font-size: 11px; letter-spacing: 0.2em; color: #9A8F78; margin-bottom: 10px;">EXPORT</div>
-          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-            <sc-for list="{{ scopes }}" as="sp" hint-placeholder-count="2">
-              <button onClick="{{ sp.onPick }}" style="cursor: pointer; flex: 1; padding: 8px 0; border-radius: 6px; font-size: 12px; font-weight: 700; background: {{ sp.bg }}; color: {{ sp.fg }}; border: 1px solid {{ sp.bd }};">{{ sp.label }}</button>
-            </sc-for>
-          </div>
-          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-            <sc-for list="{{ formats }}" as="fo" hint-placeholder-count="3">
-              <button onClick="{{ fo.onPick }}" disabled="{{ fo.disabled }}" title="{{ fo.title }}" style="cursor: {{ fo.cursor }}; flex: 1; padding: 7px 0; border-radius: 6px; font-size: 11px; font-weight: 700; background: {{ fo.bg }}; color: {{ fo.fg }}; border: 1px solid {{ fo.bd }}; opacity: {{ fo.op }};">{{ fo.label }}</button>
-            </sc-for>
-          </div>
-          <div style="display: flex; gap: 6px; margin-bottom: 10px;">
-            <sc-for list="{{ qualities }}" as="q" hint-placeholder-count="3">
-              <button onClick="{{ q.onPick }}" style="cursor: pointer; flex: 1; padding: 7px 0; border-radius: 6px; font-size: 12px; font-weight: 700; background: {{ q.bg }}; color: {{ q.fg }}; border: 1px solid {{ q.bd }};">{{ q.label }}</button>
-            </sc-for>
-          </div>
-          <button onClick="{{ onExport }}" style="cursor: pointer; width: 100%; padding: 13px 0; border-radius: 8px; font-size: 14px; font-weight: 700; background: {{ exportBg }}; color: #131008; border: none; letter-spacing: 0.04em;">{{ exportLabel }}</button>
-          <sc-if value="{{ exporting }}" hint-placeholder-val="{{ false }}">
-            <div style="margin-top: 10px;">
-              <div style="height: 6px; border-radius: 3px; background: #1C1710; overflow: hidden;">
-                <div style="height: 100%; background: #FF4B2E; border-radius: 3px; width: {{ exportPct }}%;"></div>
-              </div>
-              <div style="font-size: 11px; color: #9A8F78; margin-top: 6px;">Burning in text… {{ exportPct }}%</div>
-            </div>
-          </sc-if>
-          <sc-if value="{{ hasExport }}" hint-placeholder-val="{{ false }}">
-            <a href="{{ exportUrl }}" download="{{ exportName }}" style="display: block; margin-top: 10px; text-align: center; padding: 11px 0; border-radius: 8px; background: #1E2E17; color: #A8E86B; border: 1px solid #33501F; text-decoration: none; font-weight: 700; font-size: 13px;">↓ Download {{ exportSize }}</a>
-          </sc-if>
-          <div style="font-size: 11px; color: #6B6250; margin-top: 10px; line-height: 1.5;">{{ formatNote }}</div>
-        </section>
-      </sc-if>
-      <section>
-        <div style="font-size: 11px; letter-spacing: 0.2em; color: #9A8F78; margin-bottom: 10px;">BRAND KIT</div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; gap: 8px;">
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 5px; align-items: stretch;">
-              <span style="font-size: 11px; color: #C9BFA8;">Black</span>
-              <input type="color" value="{{ bBlack }}" onChange="{{ onBBlack }}" style="width: 100%; height: 34px; cursor: pointer;">
-            </label>
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
-              <span style="font-size: 11px; color: #C9BFA8;">Gold</span>
-              <input type="color" value="{{ bGold }}" onChange="{{ onBGold }}" style="width: 100%; height: 34px; cursor: pointer;">
-            </label>
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
-              <span style="font-size: 11px; color: #C9BFA8;">Accent</span>
-              <input type="color" value="{{ bAccent }}" onChange="{{ onBAccent }}" style="width: 100%; height: 34px; cursor: pointer;">
-            </label>
-          </div>
-          <label style="display: flex; flex-direction: column; gap: 5px;">
-            <span style="font-size: 11px; color: #C9BFA8;">Handles / watermark</span>
-            <input type="text" value="{{ bHandles }}" onChange="{{ onBHandles }}" style="background: #12100B; border: 1px solid #2C2519; color: #F2ECDD; border-radius: 6px; padding: 8px 10px; font-size: 13px;">
-          </label>
-          <div>
-            <span style="font-size: 11px; color: #C9BFA8; display: block; margin-bottom: 6px;">Headline font</span>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <sc-for list="{{ headFonts }}" as="hf" hint-placeholder-count="3">
-                <button onClick="{{ hf.onPick }}" style="cursor: pointer; padding: 7px 11px; border-radius: 6px; font-size: 13px; background: {{ hf.bg }}; color: {{ hf.fg }}; border: 1px solid {{ hf.bd }}; font-family: {{ hf.name }};">{{ hf.name }}</button>
-              </sc-for>
-            </div>
-          </div>
-          <div>
-            <span style="font-size: 11px; color: #C9BFA8; display: block; margin-bottom: 6px;">Detail font</span>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <sc-for list="{{ bodyFonts }}" as="bfn" hint-placeholder-count="2">
-                <button onClick="{{ bfn.onPick }}" style="cursor: pointer; padding: 7px 11px; border-radius: 6px; font-size: 13px; background: {{ bfn.bg }}; color: {{ bfn.fg }}; border: 1px solid {{ bfn.bd }}; font-family: {{ bfn.name }};">{{ bfn.name }}</button>
-              </sc-for>
-            </div>
-          </div>
-        </div>
-      </section>
-    </aside>
+      </div>
+    </div>
+
+    <div class="transport">
+      <button class="play" id="playBtn" aria-label="Play or pause" disabled>&#9654;</button>
+      <span class="clock" id="clock">0:00.0 / 0:00.0</span>
+      <div class="timeline" id="timeline" role="slider" aria-label="Sequence position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
   </div>
+
+  <div class="rail" id="rail">
+    <button class="railbtn" id="addBtn">+ Add</button>
+  </div>
+
+  <input type="file" id="fileInput" accept="video/*,.mp4,.mov,.m4v,.webm" multiple class="sr">
+
+  <div class="sheet" id="sheet">
+    <div class="sheet-head">
+      <h2 id="sheetTitle">Style</h2>
+      <button class="sheet-grow" id="sheetGrow" aria-label="Make this panel taller" aria-pressed="false">&#9650;</button>
+      <button class="sheet-close" id="sheetClose" aria-label="Close panel">&times;</button>
+    </div>
+    <div class="sheet-body">
+
+      <div class="pane" id="pane-style" data-pane="style">
+        <h3>Style</h3>
+        <section class="grp">
+          <span class="lbl">Template layers</span>
+          <div class="chips two" id="tplChips"></div>
+          <p class="hint" id="tplHint">Tap to stack layers on a clip — e.g. Recap watermark plus Announcement. Tap the highlighted layer again to remove it.</p>
+        </section>
+        <section class="grp">
+          <span class="lbl">Backdrop</span>
+          <div class="chips row" id="bdChips"></div>
+          <label class="slider" id="bdOpacityRow">
+            <span>Opacity</span>
+            <input type="range" id="bdOpacity" min="0" max="100" step="5" value="100" aria-label="Backdrop opacity">
+            <output id="bdOpacityOut">100%</output>
+          </label>
+        </section>
+        <section class="grp">
+          <span class="lbl">Clip</span>
+          <div class="split2">
+            <button class="btn" id="rotateBtn">&#10227; Rotate</button>
+            <button class="btn ghost" id="resetPosBtn">Reset text position</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="pane" id="pane-text" data-pane="text">
+        <h3>Text</h3>
+        <section class="grp" id="fieldsGrp">
+          <span class="lbl" id="fieldsLbl">Text</span>
+          <div id="fields"></div>
+        </section>
+        <section class="grp" id="boxesGrp" hidden>
+          <span class="lbl">Text boxes</span>
+          <div class="chips" id="boxChips"></div>
+          <div id="boxEditor" hidden>
+            <label class="field" style="margin-top:14px;">
+              <span>Content</span>
+              <textarea id="boxText" rows="2"></textarea>
+            </label>
+            <label class="slider">
+              <span>Size</span>
+              <input type="range" id="boxSize" min="24" max="220" step="2" aria-label="Text size">
+              <output id="boxSizeOut">90</output>
+            </label>
+            <span class="lbl" style="margin-top:12px;">Font</span>
+            <div class="chips" id="boxFonts"></div>
+            <span class="lbl" style="margin-top:16px;">Colour</span>
+            <div class="swatches" id="boxColors"></div>
+            <button class="btn ghost" id="delBox" style="margin-top:16px;">Delete this box</button>
+          </div>
+          <p class="hint">Drag text on the preview to move it.</p>
+        </section>
+        <section class="grp">
+          <span class="lbl">Timing</span>
+          <div class="split2">
+            <label class="field"><span>Appears at (s)</span><input type="number" id="tStart" min="0" step="0.1" inputmode="decimal"></label>
+            <label class="field"><span>Gone at (s)</span><input type="number" id="tEnd" min="0" step="0.1" inputmode="decimal" placeholder="clip end"></label>
+          </div>
+          <div class="chips row" id="animChips"></div>
+        </section>
+        <section class="grp">
+          <button class="btn" id="dupNext">Copy this styling to the next clip &rarr;</button>
+        </section>
+      </div>
+
+      <div class="pane" id="pane-trim" data-pane="trim">
+        <h3>Trim</h3>
+        <section class="grp">
+          <span class="lbl" id="trimLbl">Keep</span>
+          <div class="trimbar" id="trimbar">
+            <div class="cut" id="cutL" style="left:0;width:0"></div>
+            <div class="cut" id="cutR" style="right:0;width:0"></div>
+            <div class="keep" id="keepBox"></div>
+            <div class="ph" id="trimPh"></div>
+            <button class="h" id="trimL" aria-label="Trim start"><i>&#10094;</i></button>
+            <button class="h" id="trimR" aria-label="Trim end"><i>&#10095;</i></button>
+          </div>
+          <div class="split2" style="margin-bottom:10px;">
+            <button class="btn" id="setStart">&#8676; Start here</button>
+            <button class="btn" id="setEnd">End here &#8677;</button>
+          </div>
+          <div class="split2">
+            <button class="btn" id="splitBtn">&#9986; Split here</button>
+            <button class="btn ghost" id="resetTrim">Reset trim</button>
+          </div>
+        </section>
+        <section class="grp">
+          <span class="lbl">Order &amp; clips</span>
+          <div class="split3">
+            <button class="btn" id="moveL" aria-label="Move clip earlier">&larr; Move</button>
+            <button class="btn" id="moveR" aria-label="Move clip later">Move &rarr;</button>
+            <button class="btn ghost" id="removeClip">Remove</button>
+          </div>
+          <p class="hint">Drag along the timeline to scrub. The order here is the order clips export in.</p>
+        </section>
+      </div>
+
+      <div class="pane" id="pane-export" data-pane="export">
+        <h3>Export</h3>
+        <section class="grp">
+          <span class="lbl">What to export</span>
+          <div class="chips row" id="scopeChips"></div>
+          <span class="lbl" style="margin-top:16px;">Format</span>
+          <div class="chips row" id="formatChips"></div>
+          <span class="lbl" style="margin-top:16px;">Quality</span>
+          <div class="chips row" id="qualityChips"></div>
+          <button class="btn primary" id="exportBtn" style="margin-top:18px;">EXPORT CLIP</button>
+          <div id="exportProgress" hidden>
+            <div class="bar"><i id="exportBar"></i></div>
+            <p class="hint" id="exportPctText">Burning in text… 0%</p>
+          </div>
+          <a class="dl" id="exportDl" hidden download>&darr; Download</a>
+          <p class="hint" id="saveHint" hidden></p>
+          <p class="hint" id="formatNote"></p>
+        </section>
+      </div>
+
+      <div class="pane" id="pane-brand" data-pane="brand">
+        <h3>Brand kit</h3>
+        <section class="grp">
+          <div class="split3">
+            <label class="field"><span>Black</span><input type="color" id="cBlack"></label>
+            <label class="field"><span>Gold</span><input type="color" id="cGold"></label>
+            <label class="field"><span>Accent</span><input type="color" id="cAccent"></label>
+          </div>
+          <label class="field"><span>Handles / watermark</span><input type="text" id="bHandles" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+          <span class="lbl" style="margin-top:8px;">Headline font</span>
+          <div class="chips" id="headFonts"></div>
+          <span class="lbl" style="margin-top:16px;">Detail font</span>
+          <div class="chips" id="bodyFonts"></div>
+          <button class="btn ghost" id="resetBrand" style="margin-top:18px;">Reset brand kit</button>
+        </section>
+      </div>
+
+    </div>
+  </div>
+
+  <nav class="tabbar" id="tabbar" role="tablist" aria-label="Editor panels">
+    <button role="tab" data-tab="style"  aria-selected="false"><span class="ic" aria-hidden="true">&#9634;</span>Style</button>
+    <button role="tab" data-tab="text"   aria-selected="false"><span class="ic" aria-hidden="true">T</span>Text</button>
+    <button role="tab" data-tab="trim"   aria-selected="false"><span class="ic" aria-hidden="true">&#9986;</span>Trim</button>
+    <button role="tab" data-tab="export" aria-selected="false"><span class="ic" aria-hidden="true">&darr;</span>Export</button>
+    <button role="tab" data-tab="brand"  aria-selected="false"><span class="ic" aria-hidden="true">&#9673;</span>Brand</button>
+  </nav>
+
 </div>
-</x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;defaultAspect&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;9:16&quot;,&quot;1:1&quot;,&quot;16:9&quot;],&quot;default&quot;:&quot;9:16&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;autoPlayOnSelect&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;showHints&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
-const FONTS_HEAD = ['Anton', 'Archivo Black', 'Oswald'];
-const FONTS_BODY = ['Space Grotesk', 'Oswald'];
-const DEF_BRAND = { black: '#0A0908', gold: '#E8B34B', accent: '#FF4B2E', headFont: 'Anton', bodyFont: 'Space Grotesk', handles: '@thevillagepgh · @ftk.pgh' };
-const LS_KEY = 'villagepgh-brand-kit';
-const uid = () => Math.random().toString(36).slice(2, 9);
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-function fmt(t) {
-  t = Math.max(0, t || 0);
-  const m = Math.floor(t / 60), s = t - m * 60;
-  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
-}
-function loadBrand() {
-  try { return Object.assign({}, DEF_BRAND, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); }
-  catch (e) { return Object.assign({}, DEF_BRAND); }
-}
 
-class Component extends DCLogic {
-  state = {
-    clips: [], sel: null, aspect: (this.props.defaultAspect ?? '9:16'),
-    playing: false, time: 0, selBox: null,
-    brand: loadBrand(), quality: 'high', format: null, trimMode: false, exportScope: 'one',
-    exporting: false, exportPct: 0, exportUrl: null, exportName: '', exportSize: '',
-    areaW: 700, areaH: 560, vw: (typeof window !== 'undefined' ? window.innerWidth : 1200)
-  };
-
-  componentDidMount() {
-    if (document.fonts) ['400 60px "Anton"', '400 60px "Archivo Black"', '600 60px "Oswald"', '700 60px "Space Grotesk"', '400 30px "Space Grotesk"'].forEach(f => document.fonts.load(f).catch(() => {}));
-    this._onKey = (e) => {
-      const tag = (e.target && e.target.tagName) || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
-      if (e.key === ' ') { e.preventDefault(); this.togglePlay(); }
-      else if (e.key === '[') this.updCur({ trimStart: this._video ? this._video.currentTime : 0 });
-      else if (e.key === ']') this.updCur({ trimEnd: this._video ? this._video.currentTime : 0 });
-    };
-    window.addEventListener('keydown', this._onKey);
-    this._measure = () => {
-      if (window.innerWidth !== this.state.vw) this.setState({ vw: window.innerWidth });
-      const el = this._stageArea;
-      if (!el) { setTimeout(this._measure, 100); return; }
-      const r = el.getBoundingClientRect();
-      if (r.width && r.height && (Math.abs(r.width - this.state.areaW) > 2 || Math.abs(r.height - this.state.areaH) > 2))
-        this.setState({ areaW: r.width, areaH: r.height });
-    };
-    this._measure();
-    setTimeout(this._measure, 250);
-    window.addEventListener('resize', this._measure);
-    if (window.ResizeObserver) {
-      this._ro = new ResizeObserver(() => this._measure());
-      const attach = () => { if (this._stageArea) this._ro.observe(this._stageArea); else setTimeout(attach, 100); };
-      attach();
-    }
-    const tick = () => {
-      if (this._stageArea) {
-        const aw = this._stageArea.clientWidth, ah = this._stageArea.clientHeight;
-        if (aw && ah && (Math.abs(aw - this.state.areaW) > 2 || Math.abs(ah - this.state.areaH) > 2))
-          this.setState({ areaW: aw, areaH: ah });
-      }
-      const v = this._video, clip = this.cur();
-      if (v && clip && v.readyState >= 1) {
-        const dur = clip.duration || v.duration || 0;
-        const st = clip.trimStart || 0;
-        const te = (clip.trimEnd && clip.trimEnd > st) ? clip.trimEnd : dur;
-        if (this.state.playing && te > st + 0.05 && v.currentTime >= te) {
-          const i = this.state.clips.findIndex(c => c.id === clip.id);
-          const next = this.state.clips[i + 1] || this.state.clips[0];
-          if (next && next.id !== clip.id) this.selectClip(next.id, { play: true });
-          else v.currentTime = st;
-        }
-        this.drawPreview(v.currentTime);
-        if (this._playhead) {
-          const frac = (this.seqOffset(clip.id) + clamp(v.currentTime - st, 0, this.span(clip))) / this.seqTotal();
-          this._playhead.style.left = (frac * 100) + '%';
-        }
-        const now = performance.now();
-        if (now - (this._lastT || 0) > 200) { this._lastT = now; this.setState({ time: v.currentTime }); }
-      } else if (this._canvas) {
-        const ctx = this._canvas.getContext('2d');
-        ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
-      }
-      this._rafId = requestAnimationFrame(tick);
-    };
-    this._rafId = requestAnimationFrame(tick);
-  }
-  componentWillUnmount() {
-    cancelAnimationFrame(this._rafId);
-    window.removeEventListener('keydown', this._onKey);
-    window.removeEventListener('resize', this._measure);
-    if (this._ro) this._ro.disconnect();
-  }
-
-  cur() { return this.state.clips.find(c => c.id === this.state.sel) || null; }
-  span(c) {
-    const st = c.trimStart || 0;
-    const en = (c.trimEnd && c.trimEnd > st) ? c.trimEnd : (c.duration || 0);
-    return Math.max(0.05, en - st);
-  }
-  seqTotal() { return this.state.clips.reduce((a, c) => a + this.span(c), 0) || 1; }
-  seqOffset(id) {
-    let off = 0;
-    for (const c of this.state.clips) { if (c.id === id) break; off += this.span(c); }
-    return off;
-  }
-  seekSeqFrac(frac, keepPlay) {
-    const s = this.state, total = this.seqTotal();
-    let t = clamp(frac, 0, 1) * total;
-    for (const c of s.clips) {
-      const sp = this.span(c);
-      if (t <= sp || c === s.clips[s.clips.length - 1]) {
-        const local = (c.trimStart || 0) + Math.min(t, sp);
-        if (c.id !== s.sel) {
-          const now = performance.now();
-          if (now - (this._lastSwitch || 0) < 250) return; // throttle src swaps while scrubbing
-          this._lastSwitch = now;
-          this.selectClip(c.id, { time: local, play: !!keepPlay });
-        } else if (this._video) {
-          this._video.currentTime = local;
-          this.drawPreview(local);
-        }
-        return;
-      }
-      t -= sp;
-    }
-  }
-  updClip(id, patch) { this.setState(s => ({ clips: s.clips.map(c => c.id === id ? Object.assign({}, c, patch) : c) })); }
-  updCur(patch) { if (this.state.sel) this.updClip(this.state.sel, patch); }
-  layersOf(clip) { return (clip.templates && clip.templates.length) ? clip.templates : [clip.template]; }
-  valsFor(clip, tplId) {
-    const E = window.CaptionEngine; if (!E) return {};
-    const id = tplId || clip.template;
-    const defs = {};
-    ((E.TEMPLATES[id] || {}).fields || []).forEach(f => { defs[f.id] = f.def; });
-    return Object.assign(defs, (clip.valsByTpl || {})[id] || {});
-  }
-  resolvedClip(clip) {
-    const valsAll = {};
-    this.layersOf(clip).forEach(id => { valsAll[id] = this.valsFor(clip, id); });
-    return Object.assign({}, clip, { templates: this.layersOf(clip), valsAll, vals: this.valsFor(clip), trimEnd: clip.trimEnd || clip.duration || 0 });
-  }
-
-  drawPreview(t) {
-    const cv = this._canvas, E = window.CaptionEngine;
-    if (!cv || !E) return;
-    const ctx = cv.getContext('2d');
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    const clip = this.cur(); if (!clip) return;
-    if (clip.rotate) {
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
-      if (this._video && this._video.readyState >= 2) E.drawVideoCover(ctx, this._video, cv.width, cv.height, clip.rotate);
-    }
-    const opts = { selectedBox: this.state.selBox, editing: clip.template === 'custom', rectsOut: {} };
-    E.renderAll(ctx, cv.width, cv.height, this.resolvedClip(clip), this.state.brand, t, opts);
-    this._rects = opts.rectsOut;
-  }
-
-  newBox() {
-    return { id: uid(), text: 'YOUR TEXT', x: 0.5, y: 0.5, size: 90, font: this.state.brand.headFont, color: '#FFFFFF' };
-  }
-  addFiles(list) {
-    const files = Array.from(list || []).filter(f => f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/i.test(f.name));
-    if (!files.length) return;
-    const added = files.map(f => ({
-      id: uid(), name: f.name, url: URL.createObjectURL(f), duration: 0, thumb: null,
-      trimStart: 0, trimEnd: 0, template: 'promo', templates: ['promo'], valsByTpl: {}, tplOffset: {}, rotate: 0, backdrop: 'auto',
-      timing: { start: 0, end: null, anim: 'fade' }, custom: [this.newBox()]
-    }));
-    this.setState(s => ({ clips: s.clips.concat(added) }), () => {
-      if (!this.state.sel) this.selectClip(added[0].id);
-    });
-    const E = window.CaptionEngine;
-    added.forEach(c => { if (E) E.probe(c.url).then(m => this.updClip(c.id, { thumb: m.thumb, duration: m.duration, trimEnd: 0 })); });
-  }
-  selectClip = (id, opts) => {
-    opts = opts || {};
-    const c = this.state.clips.find(x => x.id === id); if (!c) return;
-    this.setState({ sel: id, selBox: (c.custom && c.custom[0] || {}).id || null, exportUrl: null, exportSize: '' }, () => setTimeout(this._measure, 0));
-    const v = this._video;
-    if (v) {
-      const play = opts.play != null ? opts.play : (this.props.autoPlayOnSelect ?? true);
-      if (v.getAttribute('src') !== c.url) {
-        v.src = c.url;
-        v.addEventListener('loadedmetadata', () => {
-          v.currentTime = opts.time != null ? opts.time : (c.trimStart || 0);
-          if (play) v.play().catch(() => {});
-        }, { once: true });
-      } else {
-        v.currentTime = opts.time != null ? opts.time : (c.trimStart || 0);
-        if (play) v.play().catch(() => {});
-      }
-    }
-  };
-  segDown(e, id) {
-    e.preventDefault();
-    if (!this._timeline) return;
-    const r = this._timeline.getBoundingClientRect();
-    const sx = e.clientX;
-    let moved = false, reorder = false;
-    const lp = setTimeout(() => { if (!moved) { reorder = true; this.setState({ reordering: id }); } }, 350);
-    this.dragWindow((ev) => {
-      if (Math.abs(ev.clientX - sx) > 6) moved = true;
-      if (reorder) this.reorderTo(id, ev.clientX, r);
-      else if (moved) { clearTimeout(lp); this.seekSeqFrac((ev.clientX - r.left) / r.width); }
-    }, (ev) => {
-      clearTimeout(lp);
-      if (reorder) this.setState({ reordering: null });
-      else if (!moved) {
-        const frac = (ev.clientX - r.left) / r.width;
-        const c = this.state.clips.find(x => x.id === id);
-        if (id !== this.state.sel) this.selectClip(id);
-        else if (c) this.seekSeqFrac(frac);
-      }
-    });
-  }
-  reorderTo(id, x, r) {
-    const s = this.state, total = this.seqTotal();
-    const frac = clamp((x - r.left) / r.width, 0, 1);
-    const mids = [];
-    let acc = 0;
-    s.clips.forEach(c => { const w = this.span(c) / total; mids.push(acc + w / 2); acc += w; });
-    const ins = mids.filter(m => frac > m).length;
-    const curI = s.clips.findIndex(c => c.id === id);
-    if (ins === curI || curI < 0) return;
-    const clips = s.clips.slice();
-    const [moved] = clips.splice(curI, 1);
-    clips.splice(ins > curI ? ins - 1 : ins, 0, moved);
-    this.setState({ clips });
-  }
-  edgeTrim(e, id, side) {
-    e.stopPropagation(); e.preventDefault();
-    const c0 = this.state.clips.find(x => x.id === id); if (!c0 || !this._timeline) return;
-    const r = this._timeline.getBoundingClientRect();
-    const secPerPx = this.seqTotal() / r.width;
-    const dur = c0.duration || 0;
-    const st0 = c0.trimStart || 0;
-    const en0 = (c0.trimEnd && c0.trimEnd > st0) ? c0.trimEnd : dur;
-    const sx = e.clientX;
-    this.dragWindow((ev) => {
-      const dt = (ev.clientX - sx) * secPerPx;
-      if (side === 'L') this.updClip(id, { trimStart: clamp(st0 + dt, 0, en0 - 0.2) });
-      else this.updClip(id, { trimEnd: clamp(en0 + dt, st0 + 0.2, dur) });
-    });
-  }
-  removeClip(id) {
-    const c = this.state.clips.find(x => x.id === id);
-    if (c && !this.state.clips.some(x => x.id !== id && x.url === c.url)) URL.revokeObjectURL(c.url);
-    this.setState(s => {
-      const clips = s.clips.filter(x => x.id !== id);
-      return { clips, sel: s.sel === id ? null : s.sel };
-    }, () => {
-      if (!this.cur() && this._video) { this._video.pause(); this._video.removeAttribute('src'); this._video.load(); }
-    });
-  }
-  togglePlay = () => {
-    const v = this._video; if (!v || !this.cur()) return;
-    if (v.paused) v.play().catch(() => {}); else v.pause();
-  };
-
-  dragWindow(move, up) {
-    const mv = (e) => move(e);
-    const done = (e) => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', done); if (up) up(e); };
-    window.addEventListener('pointermove', mv);
-    window.addEventListener('pointerup', done);
-  }
-  timelineFrac(e) {
-    const r = this._timeline.getBoundingClientRect();
-    return clamp((e.clientX - r.left) / r.width, 0, 1);
-  }
-  onTimelineDown = (e) => {
-    if (!this._timeline || !this.cur()) return;
-    e.preventDefault();
-    this.seekSeqFrac(this.timelineFrac(e));
-    this.dragWindow((ev) => this.seekSeqFrac(this.timelineFrac(ev)));
-  };
-  onCanvasDown = (e) => {
-    const clip = this.cur(); if (!clip) { if (this._fileInput) this._fileInput.click(); return; }
-    if (clip.template !== 'custom') {
-      e.preventDefault();
-      const r = this._canvas.getBoundingClientRect();
-      const tpl = clip.template;
-      const start = (clip.tplOffset || {})[tpl] || { x: 0, y: 0 };
-      const sx = e.clientX, sy = e.clientY;
-      this._dragged = false;
-      this.dragWindow((ev) => {
-        if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 5) this._dragged = true;
-        if (!this._dragged) return;
-        const c = this.cur(); if (!c) return;
-        const t = Object.assign({}, c.tplOffset);
-        t[tpl] = { x: clamp(start.x + (ev.clientX - sx) / r.width, -0.6, 0.6), y: clamp(start.y + (ev.clientY - sy) / r.height, -0.85, 0.85) };
-        this.updCur({ tplOffset: t });
-      }, () => { if (!this._dragged) this.togglePlay(); });
-      return;
-    }
-    const cv = this._canvas, r = cv.getBoundingClientRect();
-    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
-    const rects = this._rects || {};
-    let hit = null;
-    const ids = Object.keys(rects);
-    for (let i = ids.length - 1; i >= 0; i--) {
-      const b = rects[ids[i]];
-      if (fx * cv.width >= b.x && fx * cv.width <= b.x + b.w && fy * cv.height >= b.y && fy * cv.height <= b.y + b.h) { hit = ids[i]; break; }
-    }
-    if (!hit) { this.togglePlay(); return; }
-    e.preventDefault();
-    this.setState({ selBox: hit });
-    const box = clip.custom.find(b => b.id === hit);
-    const dx = box.x - fx, dy = box.y - fy;
-    this._dragged = false;
-    this.dragWindow((ev) => {
-      this._dragged = true;
-      const nfx = (ev.clientX - r.left) / r.width, nfy = (ev.clientY - r.top) / r.height;
-      this.updBox(hit, { x: clamp(nfx + dx, 0.04, 0.96), y: clamp(nfy + dy, 0.06, 0.96) });
-    });
-  };
-  updBox(id, patch) {
-    const clip = this.cur(); if (!clip) return;
-    this.updCur({ custom: clip.custom.map(b => b.id === id ? Object.assign({}, b, patch) : b) });
-  }
-  setVal(fid, val) {
-    const clip = this.cur(); if (!clip) return;
-    const byTpl = Object.assign({}, clip.valsByTpl);
-    byTpl[clip.template] = Object.assign({}, this.valsFor(clip), { [fid]: val });
-    this.updCur({ valsByTpl: byTpl });
-  }
-  setBrand(patch) {
-    const brand = Object.assign({}, this.state.brand, patch);
-    this.setState({ brand });
-    try { localStorage.setItem(LS_KEY, JSON.stringify(brand)); } catch (e) {}
-  }
-  onDupNext = () => {
-    const s = this.state, i = s.clips.findIndex(c => c.id === s.sel);
-    if (i < 0 || i + 1 >= s.clips.length) return;
-    const src = s.clips[i], next = s.clips[i + 1];
-    this.updClip(next.id, {
-      template: src.template,
-      templates: this.layersOf(src).slice(),
-      tplOffset: JSON.parse(JSON.stringify(src.tplOffset || {})),
-      valsByTpl: JSON.parse(JSON.stringify(src.valsByTpl)),
-      timing: Object.assign({}, src.timing),
-      custom: src.custom.map(b => Object.assign({}, b))
-    });
-    this.selectClip(next.id);
-  };
-  onExport = async () => {
-    const clip = this.cur(), E = window.CaptionEngine;
-    if (!clip || !E || this.state.exporting) return;
-    if (this._video) this._video.pause();
-    if (this.state.exportUrl) URL.revokeObjectURL(this.state.exportUrl);
-    this.setState({ exporting: true, exportPct: 0, exportUrl: null });
-    try {
-      const fmt = this.state.format || (E.supportedMime('mp4') ? 'mp4' : 'webm-vp9');
-      const all = this.state.exportScope === 'all' && this.state.clips.length > 1;
-      const items = (all ? this.state.clips : [clip]).map(c => ({ src: c.url, clip: this.resolvedClip(c) }));
-      const res = await E.exportSequence({
-        items, brand: this.state.brand,
-        aspect: this.state.aspect, quality: this.state.quality, format: fmt,
-        onProgress: (p) => {
-          const pct = Math.round(p * 100);
-          if (pct !== this.state.exportPct) this.setState({ exportPct: pct });
-        }
-      });
-      const url = URL.createObjectURL(res.blob);
-      this.setState({
-        exporting: false, exportUrl: url,
-        exportName: (all ? 'joined-' + this.state.clips.length + '-clips' : clip.name.replace(/\.[^.]+$/, '') + '-captioned') + '.' + (res.ext || 'webm'),
-        exportSize: (res.blob.size / 1e6).toFixed(1) + ' MB'
-      });
-    } catch (err) {
-      this.setState({ exporting: false });
-      alert('Export failed: ' + (err && err.message || err));
-    }
-  };
-
-  renderVals() {
-    const s = this.state, E = window.CaptionEngine;
-    const brand = s.brand;
-    const clip = this.cur();
-    const chip = (active) => active
-      ? { bg: brand.gold, fg: '#131008', bd: brand.gold }
-      : { bg: '#171310', fg: '#C9BFA8', bd: '#2C2519' };
-    const RES = E ? E.RES : { '9:16': [1080, 1920], '1:1': [1080, 1080], '16:9': [1920, 1080] };
-    const mobile = s.vw < 900;
-    const [rw, rh] = RES[s.aspect] || RES['9:16'];
-    const sc = Math.min((s.areaW - (mobile ? 16 : 36)) / rw, (s.areaH - (mobile ? 16 : 36)) / rh);
-    const dur = clip ? (clip.duration || 0) : 0;
-    const te = clip ? (clip.trimEnd || dur) : 0;
-    const trimL = dur ? (clip.trimStart || 0) / dur * 100 : 0;
-    const trimR = dur ? te / dur * 100 : 100;
-    const tplDefs = E ? E.TEMPLATES : {};
-    const vals = clip ? this.valsFor(clip) : {};
-    const selBoxObj = clip && clip.template === 'custom' ? (clip.custom || []).find(b => b.id === s.selBox) : null;
-    return {
-      rootH: (typeof CSS !== 'undefined' && CSS.supports && CSS.supports('height', '100dvh')) ? '100dvh' : '100vh',
-      bodyDir: mobile ? 'column' : 'row',
-      bodyOverflow: mobile ? 'auto' : 'hidden',
-      clipsW: mobile ? '100%' : '218px',
-      clipsOrder: mobile ? 2 : 0,
-      clipListDir: mobile ? 'row' : 'column',
-      clipCardW: mobile ? '150px' : 'auto',
-      mainFlex: mobile ? 'none' : 1,
-      mainH: mobile ? '52vh' : 'auto',
-      panelW: mobile ? '100%' : '340px',
-      panelOverflow: mobile ? 'visible' : 'auto',
-      onDrop: (e) => { e.preventDefault(); this.addFiles(e.dataTransfer.files); },
-      onDragOver: (e) => e.preventDefault(),
-      aspects: ['9:16', '1:1', '16:9'].map(a => Object.assign({ label: a, onPick: () => this.setState({ aspect: a }) }, chip(s.aspect === a))),
-      showHints: this.props.showHints ?? true,
-      hasClips: s.clips.length > 0, noClips: s.clips.length === 0,
-      clips: s.clips.map(c => ({
-        name: c.name, thumb: c.thumb, noThumb: !c.thumb,
-        bgImg: c.thumb ? 'url(' + c.thumb + ')' : 'none',
-        dur: c.duration ? fmt(c.duration) : '…',
-        bd: c.id === s.sel ? brand.gold : '#262017',
-        nameColor: c.id === s.sel ? '#F2ECDD' : '#9A8F78',
-        onSelect: () => this.selectClip(c.id),
-        onRemove: (e) => { e.stopPropagation(); this.removeClip(c.id); }
-      })),
-      onAddClick: () => this._fileInput && this._fileInput.click(),
-      fileRef: (el) => { this._fileInput = el; },
-      onFiles: (e) => { this.addFiles(e.target.files); e.target.value = ''; },
-      stageAreaRef: (el) => { this._stageArea = el; },
-      videoRef: (el) => { this._video = el; },
-      canvasRef: (el) => { this._canvas = el; },
-      timelineRef: (el) => { this._timeline = el; },
-      playheadRef: (el) => { this._playhead = el; },
-      stageW: Math.max(80, Math.round(rw * sc)), stageH: Math.max(80, Math.round(rh * sc)),
-      canW: rw, canH: rh,
-      stageCursor: clip && clip.template === 'custom' ? 'move' : 'pointer',
-      vidOpacity: clip && clip.rotate ? 0 : 1,
-      onRotate: () => { const c = this.cur(); if (c) this.updCur({ rotate: ((c.rotate || 0) + 1) % 4 }); },
-      rotLabel: clip && clip.rotate ? ' ' + (clip.rotate * 90) + '°' : '',
-      rotFg: clip && clip.rotate ? brand.gold : '#C9BFA8',
-      rotBd: clip && clip.rotate ? brand.gold : '#2C2519',
-      tlH: s.trimMode ? 64 : 46,
-      onSplit: () => {
-        const c = this.cur(); if (!c) return;
-        const dur = c.duration || 0, t = s.time;
-        const st = c.trimStart || 0, en = (c.trimEnd && c.trimEnd > st) ? c.trimEnd : dur;
-        if (!dur || t < st + 0.2 || t > en - 0.2) { alert('Play or scrub to the moment you want to cut, then hit Split.'); return; }
-        const copy = Object.assign(JSON.parse(JSON.stringify(c)), { id: uid(), name: c.name.replace(/\.[^.]+$/, '') + ' ✂2', trimStart: t, trimEnd: en === dur ? 0 : en });
-        this.setState(s2 => {
-          const clips = s2.clips.slice();
-          const i = clips.findIndex(x => x.id === c.id);
-          clips[i] = Object.assign({}, c, { trimEnd: t });
-          clips.splice(i + 1, 0, copy);
-          return { clips };
-        });
-      },
-      backdrops: [['auto', 'Auto'], ['fade', 'Fade'], ['dim', 'Dim'], ['none', 'None']].map(([id, label]) => Object.assign({
-        label, onPick: () => this.updCur({ backdrop: id })
-      }, chip((clip && (clip.backdrop || 'auto')) === id))),
-      hasBackdrop: (() => {
-        if (!clip) return false;
-        const bd = clip.backdrop || 'auto';
-        if (bd === 'none') return false;
-        if (bd !== 'auto') return true;
-        return E ? this.layersOf(clip).some(id => ((E.TEMPLATES[id] || {}).backdrop || 'none') !== 'none') : false;
-      })(),
-      bdOpacity: clip && clip.backdropOpacity != null ? clip.backdropOpacity : 100,
-      onBdOpacity: (e) => this.updCur({ backdropOpacity: Number(e.target.value) }),
-      scopes: [['one', 'This clip'], ['all', 'Join all clips']].map(([id, label]) => Object.assign({
-        label, onPick: () => this.setState({ exportScope: id })
-      }, chip(s.exportScope === id))),
-      onCanvasDown: this.onCanvasDown,
-      noSel: !clip, hasSel: !!clip,
-      onVidPlay: () => this.setState({ playing: true }),
-      onVidPause: () => this.setState({ playing: false }),
-      onPlayToggle: this.togglePlay,
-      playIcon: s.playing ? '❚❚' : '▶',
-      timeLabel: clip ? fmt(this.seqOffset(clip.id) + clamp(s.time - (clip.trimStart || 0), 0, this.span(clip))) + ' / ' + fmt(this.seqTotal()) : '0:00.0 / 0:00.0',
-      onTimelineDown: this.onTimelineDown,
-      segs: (() => {
-        const total = this.seqTotal();
-        return s.clips.map(c => ({
-          w: (this.span(c) / total * 100).toFixed(2),
-          bd: s.reordering === c.id ? brand.accent : (c.id === s.sel ? brand.gold : '#2C2519'),
-          bgImg: c.thumb ? 'url(' + c.thumb + ')' : 'linear-gradient(#1C1710, #1C1710)',
-          dur: fmt(this.span(c)),
-          op: s.reordering === c.id ? 0.75 : 1,
-          selected: c.id === s.sel,
-          onDown: (e) => this.segDown(e, c.id),
-          onTrimL: (e) => this.edgeTrim(e, c.id, 'L'),
-          onTrimR: (e) => this.edgeTrim(e, c.id, 'R')
-        }));
-      })(),
-      trimLabel: clip ? ('keep ' + fmt(clip.trimStart || 0) + ' → ' + fmt(te) + '  (' + fmt(Math.max(0, te - (clip.trimStart || 0))) + ')') : '',
-      templates: Object.keys(tplDefs).map(id => {
-        const layers = clip ? this.layersOf(clip) : [];
-        const on = layers.includes(id), focused = clip && clip.template === id;
-        const style = focused ? { bg: brand.gold, fg: '#131008', bd: brand.gold }
-          : on ? { bg: '#171310', fg: brand.gold, bd: brand.gold }
-          : { bg: '#171310', fg: '#C9BFA8', bd: '#2C2519' };
-        return Object.assign({
-          name: (on ? '● ' : '') + tplDefs[id].name,
-          onPick: () => {
-            if (!clip) return;
-            if (!on) {
-              this.updCur({ templates: layers.concat([id]), template: id });
-            } else if (!focused) {
-              this.updCur({ template: id });
-            } else {
-              const rest = layers.filter(x => x !== id);
-              if (!rest.length) return;
-              this.updCur({ templates: rest, template: rest[rest.length - 1] });
-            }
-            if (id === 'custom' && clip.custom.length) this.setState({ selBox: clip.custom[0].id });
-          }
-        }, style);
-      }),
-      focusName: clip && tplDefs[clip.template] ? tplDefs[clip.template].name.toUpperCase() : '',
-      notCustom: clip ? clip.template !== 'custom' : true,
-      isCustom: clip ? clip.template === 'custom' : false,
-      fields: clip && tplDefs[clip.template] ? tplDefs[clip.template].fields.map(f => ({
-        label: f.label, multi: !!f.multi, single: !f.multi,
-        value: vals[f.id] != null ? vals[f.id] : '',
-        onChange: (e) => this.setVal(f.id, e.target.value)
-      })) : [],
-      boxes: clip ? (clip.custom || []).map((b, i) => Object.assign({
-        label: (b.text || 'Text').split('\n')[0] || ('Text ' + (i + 1)),
-        onSelect: () => this.setState({ selBox: b.id })
-      }, chip(b.id === s.selBox))) : [],
-      onAddBox: () => {
-        if (!clip) return;
-        const b = this.newBox();
-        b.y = 0.3 + 0.12 * (clip.custom.length % 5);
-        this.updCur({ custom: clip.custom.concat([b]) });
-        this.setState({ selBox: b.id });
-      },
-      hasSelBox: !!selBoxObj,
-      boxText: selBoxObj ? selBoxObj.text : '',
-      onBoxText: (e) => selBoxObj && this.updBox(selBoxObj.id, { text: e.target.value }),
-      boxSize: selBoxObj ? selBoxObj.size : 90,
-      onBoxSize: (e) => selBoxObj && this.updBox(selBoxObj.id, { size: Number(e.target.value) }),
-      boxFonts: FONTS_HEAD.concat(['Space Grotesk']).map(n => Object.assign({ name: n, onPick: () => selBoxObj && this.updBox(selBoxObj.id, { font: n }) }, chip(selBoxObj && selBoxObj.font === n))),
-      boxColors: ['#FFFFFF', brand.gold, brand.accent, brand.black].map(c => ({
-        c, bd: selBoxObj && selBoxObj.color === c ? '#F2ECDD' : '#2C2519',
-        onPick: () => selBoxObj && this.updBox(selBoxObj.id, { color: c })
-      })),
-      onRemoveBox: () => {
-        if (!clip || !selBoxObj) return;
-        const rest = clip.custom.filter(b => b.id !== selBoxObj.id);
-        this.updCur({ custom: rest });
-        this.setState({ selBox: rest.length ? rest[0].id : null });
-      },
-      tStart: clip ? clip.timing.start : 0,
-      onTStart: (e) => clip && this.updCur({ timing: Object.assign({}, clip.timing, { start: Math.max(0, Number(e.target.value) || 0) }) }),
-      tEnd: clip && clip.timing.end != null ? clip.timing.end : '',
-      onTEnd: (e) => clip && this.updCur({ timing: Object.assign({}, clip.timing, { end: e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0) }) }),
-      anims: [['fade', 'Fade'], ['slide', 'Slide up'], ['none', 'Cut']].map(([id, label]) => Object.assign({
-        label, onPick: () => clip && this.updCur({ timing: Object.assign({}, clip.timing, { anim: id }) })
-      }, chip(clip && clip.timing.anim === id))),
-      trimMode: s.trimMode,
-      onTrimToggle: () => this.setState({ trimMode: !s.trimMode }, () => setTimeout(this._measure, 0)),
-      trimBtnBg: s.trimMode ? brand.gold : '#171310',
-      trimBtnFg: s.trimMode ? '#131008' : '#C9BFA8',
-      trimBtnBd: s.trimMode ? brand.gold : '#2C2519',
-      hasOffset: !!(clip && clip.tplOffset && clip.tplOffset[clip.template] && (clip.tplOffset[clip.template].x || clip.tplOffset[clip.template].y)),
-      onResetOffset: () => {
-        const c = this.cur(); if (!c) return;
-        const t = Object.assign({}, c.tplOffset); delete t[c.template];
-        this.updCur({ tplOffset: t });
-      },
-      formats: ['mp4', 'webm-vp9', 'webm-vp8'].map(id => {
-        const ok = E && !!E.supportedMime(id);
-        const active = (s.format || (E && E.supportedMime('mp4') ? 'mp4' : 'webm-vp9')) === id;
-        const base = ok ? chip(active) : { bg: '#12100B', fg: '#4A4232', bd: '#1E1912' };
-        return Object.assign({
-          label: id === 'mp4' ? 'MP4' : (id === 'webm-vp9' ? 'WebM VP9' : 'WebM VP8'),
-          disabled: !ok, op: ok ? '1' : '0.6', cursor: ok ? 'pointer' : 'not-allowed',
-          title: ok ? '' : 'Not supported by this browser',
-          onPick: () => ok && this.setState({ format: id })
-        }, base);
-      }),
-      formatNote: (E && E.supportedMime('mp4'))
-        ? 'MP4 (H.264) uploads straight to Instagram/TikTok. WebM is a fallback — convert to MP4 first if an app rejects it.'
-        : 'This browser can only record WebM. Instagram/TikTok may reject it — convert to MP4 first, or export from Chrome for direct MP4.',
-      onSetTrimStart: () => this.updCur({ trimStart: s.time }),
-      onSetTrimEnd: () => this.updCur({ trimEnd: s.time }),
-      onResetTrim: () => this.updCur({ trimStart: 0, trimEnd: 0 }),
-      onDupNext: this.onDupNext,
-      dupColor: (s.clips.findIndex(c => c.id === s.sel) < s.clips.length - 1 && clip) ? '#E8B34B' : '#4A4232',
-      qualities: [['standard', 'Standard'], ['high', 'High'], ['max', 'Max']].map(([id, label]) => Object.assign({
-        label, onPick: () => this.setState({ quality: id })
-      }, chip(s.quality === id))),
-      onExport: this.onExport,
-      exporting: s.exporting,
-      exportBg: s.exporting ? '#4A4232' : brand.accent,
-      exportLabel: s.exporting ? 'EXPORTING…' : 'EXPORT CLIP',
-      exportPct: s.exportPct,
-      hasExport: !!s.exportUrl && !s.exporting,
-      exportUrl: s.exportUrl || '#', exportName: s.exportName, exportSize: s.exportSize,
-      bBlack: brand.black, onBBlack: (e) => this.setBrand({ black: e.target.value }),
-      bGold: brand.gold, onBGold: (e) => this.setBrand({ gold: e.target.value }),
-      bAccent: brand.accent, onBAccent: (e) => this.setBrand({ accent: e.target.value }),
-      bHandles: brand.handles, onBHandles: (e) => this.setBrand({ handles: e.target.value }),
-      headFonts: FONTS_HEAD.map(n => Object.assign({ name: n, onPick: () => this.setBrand({ headFont: n }) }, chip(brand.headFont === n))),
-      bodyFonts: FONTS_BODY.map(n => Object.assign({ name: n, onPick: () => this.setBrand({ bodyFont: n }) }, chip(brand.bodyFont === n)))
-    };
-  }
-}
-</script>
+<script src="./captions-engine.js?v=2"></script>
+<script src="./app.js?v=4"></script>
 </body>
 </html>

@@ -37,6 +37,7 @@
     playing: false, time: 0,
     brand: loadBrand(),
     quality: 'high', format: null, scope: 'one', safe: false,
+    targetLen: 30, vibe: 'hype', building: false, analyses: {}, undoSnapshot: null,
     exporting: false, pct: 0, fast: null,
     exportUrl: null, exportName: '', exportSize: '',
     tab: null
@@ -44,7 +45,8 @@
 
   var el = {};
   ['app','stage','frame','video','canvas','empty','emptyAdd','aspectSeg','playBtn','clock','timeline','playhead',
-   'rail','addBtn','fileInput','sheet','sheetTitle','sheetClose','sheetGrow','tabbar',
+   'rail','addBtn','fileInput','sheet','sheetTitle','sheetClose','sheetGrow','tabbar','brandBtn',
+   'lenChips','vibeChips','buildBtn','buildProgress','buildBar','buildStatus','undoBuild','buildNote',
    'tplChips','tplHint','bdChips','bdOpacityRow','bdOpacity','bdOpacityOut','rotateBtn','resetPosBtn',
    'fieldsGrp','fieldsLbl','fields','boxesGrp','boxChips','boxEditor','boxText','boxSize','boxSizeOut',
    'boxFonts','boxColors','delBox','boxStart','boxEnd','boxStartNow','boxEndNow','safeBtn','tStart','tEnd','animChips','dupNext',
@@ -68,6 +70,9 @@
     return null;
   };
   var idxOf = function (id) { for (var i = 0; i < state.clips.length; i++) if (state.clips[i].id === id) return i; return -1; };
+  // Clips flagged `off` are kept and visible in the rail but excluded from the
+  // sequence, the timeline and the export. Invariant: the selected clip is in.
+  var activeClips = function () { return state.clips.filter(function (c) { return !c.off; }); };
 
   // ---------------------------------------------------------------- persistence
 
@@ -81,6 +86,7 @@
       v: 1,
       aspect: state.aspect, sel: state.sel, quality: state.quality,
       scope: state.scope, safe: state.safe, brand: state.brand,
+      targetLen: state.targetLen, vibe: state.vibe,
       clips: state.clips.map(function (c) {
         return {
           id: c.id, name: c.name, duration: c.duration, thumb: c.thumb,
@@ -88,7 +94,7 @@
           template: c.template, templates: c.templates,
           valsByTpl: c.valsByTpl, tplOffset: c.tplOffset,
           rotate: c.rotate, backdrop: c.backdrop, backdropOpacity: c.backdropOpacity,
-          timing: c.timing, custom: c.custom
+          timing: c.timing, custom: c.custom, off: !!c.off
         };
       })
     };
@@ -126,6 +132,8 @@
         state.quality = proj.quality || state.quality;
         state.scope = proj.scope || state.scope;
         state.safe = !!proj.safe;
+        if (proj.targetLen) state.targetLen = proj.targetLen;
+        if (proj.vibe) state.vibe = proj.vibe;
         if (proj.brand) { state.brand = Object.assign({}, DEF_BRAND, proj.brand); }
         var wanted = restored.filter(function (c) { return c.id === proj.sel; })[0] || restored[0];
         restoring = false;
@@ -174,13 +182,13 @@
     return Math.max(0.05, en - st);
   }
   function seqTotal() {
-    var t = 0;
-    for (var i = 0; i < state.clips.length; i++) t += span(state.clips[i]);
+    var list = activeClips(), t = 0;
+    for (var i = 0; i < list.length; i++) t += span(list[i]);
     return t || 1;
   }
   function seqOffset(id) {
-    var off = 0;
-    for (var i = 0; i < state.clips.length; i++) { if (state.clips[i].id === id) break; off += span(state.clips[i]); }
+    var list = activeClips(), off = 0;
+    for (var i = 0; i < list.length; i++) { if (list[i].id === id) break; off += span(list[i]); }
     return off;
   }
   function layersOf(c) { return (c.templates && c.templates.length) ? c.templates : [c.template]; }
@@ -297,8 +305,9 @@
       var st = clip.trimStart || 0;
       var te = (clip.trimEnd && clip.trimEnd > st) ? clip.trimEnd : dur;
       if (state.playing && te > st + 0.05 && video.currentTime >= te) {
-        var i = idxOf(clip.id);
-        var next = state.clips[i + 1] || state.clips[0];
+        var list = activeClips();
+        var i = list.findIndex(function (c) { return c.id === clip.id; });
+        var next = list[i + 1] || list[0];
         if (next && next.id !== clip.id) selectClip(next.id, { play: true });
         else video.currentTime = st;
       }
@@ -358,13 +367,14 @@
         requestDraw();
       });
     });
-    if (first && !isDesktop()) openTab('text');
+    if (first && !isDesktop()) openTab('build');
   }
 
   function selectClip(id, opts) {
     opts = opts || {};
     var c = state.clips[idxOf(id)];
     if (!c) return;
+    c.off = false;
     state.sel = id;
     state.selBox = (c.custom && c.custom[0] && c.custom[0].id) || null;
     clearExport();
@@ -429,11 +439,12 @@
   // ---------------------------------------------------------------- seeking
 
   function seekSeqFrac(frac) {
+    var list = activeClips();
     var total = seqTotal();
     var t = clamp(frac, 0, 1) * total;
-    for (var i = 0; i < state.clips.length; i++) {
-      var c = state.clips[i], sp = span(c);
-      if (t <= sp || i === state.clips.length - 1) {
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i], sp = span(c);
+      if (t <= sp || i === list.length - 1) {
         var local = (c.trimStart || 0) + Math.min(t, sp);
         if (c.id !== state.sel) {
           var now = performance.now();
@@ -495,6 +506,12 @@
       : '0:00.0 / 0:00.0';
   }
 
+  function activeIndex(id) {
+    var list = activeClips();
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return i;
+    return -1;
+  }
+
   function renderRail() {
     var rail = el.rail;
     Array.prototype.slice.call(rail.querySelectorAll('.clip')).forEach(function (n) { n.remove(); });
@@ -503,16 +520,41 @@
       b.type = 'button';
       b.className = 'clip';
       b.setAttribute('aria-pressed', c.id === state.sel ? 'true' : 'false');
+      if (c.off) b.dataset.off = '1';
       b.innerHTML =
-        '<span class="idx">' + (i + 1) + '</span>' +
+        '<span class="idx"></span>' +
         '<span class="thumb"></span>' +
         '<span class="meta"><span class="nm"></span><span class="dur"></span></span>';
       var th = b.querySelector('.thumb');
       if (c.thumb) th.style.backgroundImage = 'url(' + c.thumb + ')';
       else th.textContent = 'loading…';
+      b.querySelector('.idx').textContent = c.off ? '—' : String(activeIndex(c.id) + 1);
       b.querySelector('.nm').textContent = c.name;
-      b.querySelector('.dur').textContent = c.duration ? fmt(span(c)) : '…';
+      b.querySelector('.dur').textContent = c.off ? 'out' : (c.duration ? fmt(span(c)) : '…');
       b.addEventListener('click', function () { selectClip(c.id, { play: false }); });
+
+      // Toggle a clip in or out of the cut without selecting it.
+      var t = document.createElement('span');
+      t.className = 'inout';
+      t.setAttribute('role', 'button');
+      t.tabIndex = 0;
+      t.textContent = c.off ? '+' : '\u2013';
+      t.title = c.off ? 'Put back in the cut' : 'Leave out of the cut';
+      t.setAttribute('aria-label', t.title);
+      var toggle = function (ev) {
+        ev.stopPropagation();
+        if (!c.off && activeClips().length <= 1) { toast('That is the only clip in the cut.'); return; }
+        c.off = !c.off;
+        if (c.off && state.sel === c.id) {
+          var nxt = activeClips()[0];
+          if (nxt) selectClip(nxt.id, { play: false });
+        }
+        render();
+        requestDraw();
+      };
+      t.addEventListener('click', toggle);
+      t.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(ev); } });
+      b.appendChild(t);
       rail.appendChild(b);
     });
   }
@@ -521,7 +563,7 @@
     var tl = el.timeline;
     Array.prototype.slice.call(tl.querySelectorAll('.seg-clip')).forEach(function (n) { n.remove(); });
     var total = seqTotal();
-    state.clips.forEach(function (c) {
+    activeClips().forEach(function (c) {
       var d = document.createElement('div');
       d.className = 'seg-clip';
       d.style.width = (span(c) / total * 100).toFixed(2) + '%';
@@ -715,9 +757,10 @@
     el.moveR.disabled = !has || idxOf(state.sel) >= state.clips.length - 1;
 
     // --- export
-    fill(el.scopeChips, [['one', 'This clip'], ['all', state.clips.length > 1 ? 'Join all ' + state.clips.length : 'Join all']].map(function (p) {
+    var inCut = activeClips().length;
+    fill(el.scopeChips, [['one', 'This clip'], ['all', inCut > 1 ? 'Join all ' + inCut : 'Join all']].map(function (p) {
       return chipButton(p[1], state.scope === p[0], function () { state.scope = p[0]; render(); },
-        { disabled: p[0] === 'all' && state.clips.length < 2 });
+        { disabled: p[0] === 'all' && inCut < 2 });
     }));
     var defFormat = defaultFormat();
     var fast = state.fast && state.fast.ok;
@@ -734,7 +777,7 @@
       return chipButton(p[1], state.quality === p[0], function () { state.quality = p[0]; render(); });
     }));
     el.exportBtn.disabled = !has || state.exporting || !(defFormat || fast);
-    el.exportBtn.textContent = state.exporting ? 'EXPORTING…' : (state.scope === 'all' && state.clips.length > 1 ? 'EXPORT ' + state.clips.length + ' CLIPS' : 'EXPORT CLIP');
+    el.exportBtn.textContent = state.exporting ? 'EXPORTING…' : (state.scope === 'all' && inCut > 1 ? 'EXPORT ' + inCut + ' CLIPS' : 'EXPORT CLIP');
     el.exportProgress.hidden = !state.exporting;
     el.exportBar.style.width = state.pct + '%';
     el.exportPctText.textContent = 'Burning in text… ' + state.pct + '%';
@@ -749,6 +792,23 @@
         : 'Saves to your downloads folder.';
     }
     el.formatNote.textContent = formatNote();
+
+    // --- build
+    fill(el.lenChips, [[15, '15s'], [30, '30s'], [60, '60s']].map(function (p) {
+      return chipButton(p[1], state.targetLen === p[0], function () { state.targetLen = p[0]; render(); });
+    }));
+    fill(el.vibeChips, [['hype', 'Hype'], ['steady', 'Steady']].map(function (p) {
+      return chipButton(p[1], state.vibe === p[0], function () { state.vibe = p[0]; render(); });
+    }));
+    el.buildBtn.disabled = state.clips.length === 0 || state.building;
+    el.buildBtn.textContent = state.building ? 'BUILDING…' : (state.clips.length > 1 ? 'BUILD A RECAP' : 'FIND THE BEST BIT');
+    el.buildProgress.hidden = !state.building;
+    el.undoBuild.hidden = !state.undoSnapshot || state.building;
+    el.buildNote.textContent = state.clips.length
+      ? (state.clips.length === 1
+          ? 'One clip loaded — this will trim it to its strongest ' + state.targetLen + 's or less.'
+          : state.clips.length + ' clips loaded. Nothing is deleted; unused clips just get trimmed out of the cut and you can undo.')
+      : 'Add clips first.';
 
     // --- brand
     [['cBlack', 'black'], ['cGold', 'gold'], ['cAccent', 'accent']].forEach(function (p) {
@@ -821,7 +881,7 @@
     Array.prototype.slice.call(el.sheet.querySelectorAll('.pane')).forEach(function (p) {
       p.dataset.active = p.dataset.pane === state.tab ? '1' : '0';
     });
-    if (state.tab) el.sheetTitle.textContent = { style: 'Style', text: 'Text', trim: 'Trim', export: 'Export', brand: 'Brand kit' }[state.tab] || '';
+    if (state.tab) el.sheetTitle.textContent = { build: 'Build', style: 'Style', text: 'Text', trim: 'Trim', export: 'Export', brand: 'Brand kit' }[state.tab] || '';
     render();
     // Let the flex layout settle, then re-fit the preview into whatever height is left.
     requestAnimationFrame(sizeStage);
@@ -840,11 +900,11 @@
 
   function exportItems() {
     var clip = cur();
-    var all = state.scope === 'all' && state.clips.length > 1;
+    var all = state.scope === 'all' && activeClips().length > 1;
     return {
       all: all,
       clip: clip,
-      items: (all ? state.clips : [clip]).map(function (c) { return { src: c.url, clip: resolvedClip(c) }; })
+      items: (all ? activeClips() : [clip]).map(function (c) { return { src: c.url, clip: resolvedClip(c) }; })
     };
   }
 
@@ -867,7 +927,7 @@
   function finishExport(blob, ext, all, clip) {
     state.exporting = false;
     state.exportUrl = URL.createObjectURL(blob);
-    var base = all ? ('joined-' + state.clips.length + '-clips')
+    var base = all ? ('joined-' + activeClips().length + '-clips')
                    : String(clip.name).replace(/\.[^.]+$/, '') + '-captioned';
     state.exportName = base.replace(/[^\w\-. ]+/g, '_') + '.' + (ext || 'mp4');
     state.exportSize = fileSize(blob.size);
@@ -957,6 +1017,102 @@
     });
   }
 
+  // ---------------------------------------------------------------- auto-build
+
+  function buildStatus(msg, frac) {
+    el.buildStatus.textContent = msg;
+    el.buildBar.style.width = Math.round(clamp(frac, 0, 1) * 100) + '%';
+  }
+
+  function snapshotForUndo() {
+    return {
+      order: state.clips.map(function (c) { return c.id; }),
+      trims: state.clips.map(function (c) { return { id: c.id, s: c.trimStart, e: c.trimEnd, off: !!c.off }; }),
+      sel: state.sel
+    };
+  }
+
+  function undoBuild() {
+    var snap = state.undoSnapshot;
+    if (!snap) return;
+    var byId = {};
+    state.clips.forEach(function (c) { byId[c.id] = c; });
+    state.clips = snap.order.map(function (id) { return byId[id]; }).filter(Boolean);
+    snap.trims.forEach(function (t) { if (byId[t.id]) { byId[t.id].trimStart = t.s; byId[t.id].trimEnd = t.e; byId[t.id].off = t.off; } });
+    state.undoSnapshot = null;
+    if (byId[snap.sel]) selectClip(snap.sel, { play: false });
+    render();
+    requestDraw();
+    toast('Back to how it was.');
+  }
+
+  async function autoBuild() {
+    if (state.building || !state.clips.length || !window.AutoCut) return;
+    state.building = true;
+    state.undoSnapshot = snapshotForUndo();
+    video.pause();
+    render();
+    buildStatus('Listening to the room…', 0.02);
+
+    try {
+      var clips = state.clips.map(function (c) {
+        return { id: c.id, url: c.url, name: c.name, duration: c.duration };
+      });
+
+      // Pass 1: audio across everything. Cheap, and it does most of the work.
+      var analyses = await window.AutoCut.analyse(clips, function (p, name) {
+        buildStatus('Listening to the room… ' + (name || ''), 0.02 + p * 0.45);
+      });
+      state.analyses = analyses;
+
+      var result = window.AutoCut.plan(clips, analyses, state.targetLen, state.vibe);
+      if (!result || !result.picks.length) throw new Error('Could not read those clips.');
+
+      // Pass 2: motion, but only on the windows that already look promising.
+      buildStatus('Looking for the busy moments…', 0.5);
+      await window.AutoCut.refine(result.picks, analyses, result.segLen, function (p) {
+        buildStatus('Looking for the busy moments…', 0.5 + p * 0.45);
+      });
+
+      buildStatus('Laying out the cut…', 0.97);
+
+      // Apply: reorder to the plan, trim each pick to its window, drop the rest
+      // to a zero-length tail so nothing is destroyed.
+      var byId = {};
+      state.clips.forEach(function (c) { byId[c.id] = c; });
+      var chosen = [];
+      result.picks.forEach(function (p) {
+        var c = byId[p.id];
+        if (!c) return;
+        var len = Math.min(p.len, Math.max(0.4, c.duration - p.start));
+        c.trimStart = Math.max(0, p.start);
+        c.trimEnd = Math.min(c.duration, c.trimStart + len);
+        chosen.push(c);
+      });
+      var chosenIds = {};
+      chosen.forEach(function (c) { c.off = false; chosenIds[c.id] = true; });
+      var leftovers = state.clips.filter(function (c) { return !chosenIds[c.id]; });
+      leftovers.forEach(function (c) { c.off = true; });
+      state.clips = chosen.concat(leftovers);
+
+      state.scope = chosen.length > 1 ? 'all' : 'one';
+      state.building = false;
+      selectClip(chosen[0].id, { play: false });
+      render();
+      requestDraw();
+
+      var secs = chosen.reduce(function (a, c) { return a + span(c); }, 0);
+      var bits = ['Built a ' + secs.toFixed(0) + 's cut from ' + chosen.length + ' clip' + (chosen.length === 1 ? '' : 's')];
+      if (result.picks.some(function (p) { return p.tempo > 0; })) bits.push('cut to the beat');
+      if (result.dropped > 0) bits.push('left out ' + result.dropped + ' quiet one' + (result.dropped === 1 ? '' : 's'));
+      toast(bits.join(', ') + '. Play it, then nudge anything you want.');
+    } catch (err) {
+      state.building = false;
+      render();
+      toast('Auto-build failed: ' + ((err && err.message) || err), 'err');
+    }
+  }
+
   // ---------------------------------------------------------------- events
 
   el.addBtn.addEventListener('click', function () { el.fileInput.click(); });
@@ -997,6 +1153,9 @@
     b.addEventListener('click', function () { openTab(b.dataset.tab); });
   });
   el.sheetClose.addEventListener('click', function () { openTab(state.tab); });
+  el.brandBtn.addEventListener('click', function () { openTab('brand'); });
+  el.buildBtn.addEventListener('click', autoBuild);
+  el.undoBuild.addEventListener('click', undoBuild);
   el.sheetGrow.addEventListener('click', function () {
     var tall = el.sheet.dataset.tall !== '1';
     el.sheet.dataset.tall = tall ? '1' : '0';
@@ -1027,10 +1186,11 @@
   });
 
   function clipAtFrac(frac) {
+    var list = activeClips();
     var t = clamp(frac, 0, 1) * seqTotal();
-    for (var i = 0; i < state.clips.length; i++) {
-      var sp = span(state.clips[i]);
-      if (t <= sp || i === state.clips.length - 1) return state.clips[i];
+    for (var i = 0; i < list.length; i++) {
+      var sp = span(list[i]);
+      if (t <= sp || i === list.length - 1) return list[i];
       t -= sp;
     }
     return null;
@@ -1323,6 +1483,12 @@
   if (isDesktop()) {
     el.sheet.dataset.open = '1';
     Array.prototype.slice.call(el.sheet.querySelectorAll('.pane')).forEach(function (p) { p.dataset.active = '1'; });
+  }
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function () {});
+    });
   }
 
   if (window.FastExport && window.FastExport.present()) {

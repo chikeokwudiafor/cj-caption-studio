@@ -113,6 +113,16 @@ button:active:not(:disabled) { transform: scale(.965); }
 }
 .seg button[aria-pressed="true"] { background: var(--gold); color: #131008; }
 
+.seg.wide { width: 100%; }
+.seg.wide button { flex: 1; min-height: 44px; }
+
+.iconbtn {
+  flex: none; width: 44px; height: 44px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--surf-2); color: var(--dim);
+  font-size: 16px; cursor: pointer;
+}
+.iconbtn[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); }
+
 /* ---------- stage ---------- */
 
 .center { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
@@ -183,6 +193,18 @@ button:active:not(:disabled) { transform: scale(.965); }
 .clip[aria-pressed="true"] .nm { color: var(--fg); }
 .clip .dur { font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .clip .idx { position: absolute; top: 4px; left: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: rgba(0,0,0,.72); color: var(--gold); font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+
+.clip[data-off="1"] { opacity: .42; border-style: dashed; }
+.clip[data-off="1"] .thumb { filter: grayscale(1); }
+.inout {
+  position: absolute; top: 4px; right: 4px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(0,0,0,.72); color: var(--fg);
+  display: grid; place-items: center;
+  font-size: 15px; font-weight: 700; line-height: 1;
+  cursor: pointer;
+}
+.clip[data-off="1"] .inout { background: var(--gold); color: #131008; }
 
 .railbtn {
   flex: none;

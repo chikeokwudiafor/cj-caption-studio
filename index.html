@@ -13,8 +13,8 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="stylesheet" href="./styles.css?v=5">
-<link rel="stylesheet" href="./fonts.css?v=5">
+<link rel="stylesheet" href="./styles.css?v=6">
+<link rel="stylesheet" href="./fonts.css?v=6">
 <link rel="preload" as="font" type="font/woff2" href="./fonts/anton-400-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="./fonts/space-grotesk-400-latin.woff2" crossorigin>
 </head>
@@ -29,7 +29,7 @@
       <span>THE VILLAGE PGH &times; FTK</span>
     </div>
     <div class="spacer"></div>
-    <div class="seg" id="aspectSeg" role="group" aria-label="Frame ratio"></div>
+    <button class="iconbtn" id="brandBtn" aria-label="Brand kit">&#9673;</button>
   </header>
 
   <div class="center">
@@ -69,6 +69,26 @@
       <button class="sheet-close" id="sheetClose" aria-label="Close panel">&times;</button>
     </div>
     <div class="sheet-body">
+
+      <div class="pane" id="pane-build" data-pane="build">
+        <h3>Build</h3>
+        <section class="grp">
+          <p class="hint" style="margin-top:0;">Drop in everything you shot. This listens for where the room got loud and looks for where the frame got busy, then cuts a draft you can nudge.</p>
+          <span class="lbl" style="margin-top:16px;">Frame</span>
+          <div class="seg wide" id="aspectSeg" role="group" aria-label="Frame ratio"></div>
+          <span class="lbl" style="margin-top:16px;">How long</span>
+          <div class="chips row" id="lenChips"></div>
+          <span class="lbl" style="margin-top:16px;">Feel</span>
+          <div class="chips row" id="vibeChips"></div>
+          <button class="btn primary" id="buildBtn" style="margin-top:18px;">BUILD A RECAP</button>
+          <div id="buildProgress" hidden>
+            <div class="bar"><i id="buildBar"></i></div>
+            <p class="hint" id="buildStatus">Listening…</p>
+          </div>
+          <button class="btn ghost" id="undoBuild" style="margin-top:10px;" hidden>Undo auto-build</button>
+          <p class="hint" id="buildNote"></p>
+        </section>
+      </div>
 
       <div class="pane" id="pane-style" data-pane="style">
         <h3>Style</h3>
@@ -222,18 +242,19 @@
   </div>
 
   <nav class="tabbar" id="tabbar" role="tablist" aria-label="Editor panels">
+    <button role="tab" data-tab="build"  aria-selected="false"><span class="ic" aria-hidden="true">&#10022;</span>Build</button>
     <button role="tab" data-tab="style"  aria-selected="false"><span class="ic" aria-hidden="true">&#9634;</span>Style</button>
     <button role="tab" data-tab="text"   aria-selected="false"><span class="ic" aria-hidden="true">T</span>Text</button>
     <button role="tab" data-tab="trim"   aria-selected="false"><span class="ic" aria-hidden="true">&#9986;</span>Trim</button>
     <button role="tab" data-tab="export" aria-selected="false"><span class="ic" aria-hidden="true">&darr;</span>Export</button>
-    <button role="tab" data-tab="brand"  aria-selected="false"><span class="ic" aria-hidden="true">&#9673;</span>Brand</button>
   </nav>
 
 </div>
 
-<script src="./store.js?v=5"></script>
-<script src="./captions-engine.js?v=5"></script>
-<script src="./mp4-export.js?v=5"></script>
-<script src="./app.js?v=5"></script>
+<script src="./store.js?v=6"></script>
+<script src="./autocut.js?v=6"></script>
+<script src="./captions-engine.js?v=6"></script>
+<script src="./mp4-export.js?v=6"></script>
+<script src="./app.js?v=6"></script>
 </body>
 </html>

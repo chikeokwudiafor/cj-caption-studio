@@ -21,6 +21,14 @@
     var m = Math.floor(t / 60), s = t - m * 60;
     return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
   }
+  var EV_KEY = 'villagepgh-event';
+  var DEF_EVENT = { event: '', date: '', venue: '', city: '', doors: '', genre: '', lineup: '', tickets: '' };
+  function loadEvent() {
+    try { return Object.assign({}, DEF_EVENT, JSON.parse(localStorage.getItem(EV_KEY) || '{}')); }
+    catch (e) { return Object.assign({}, DEF_EVENT); }
+  }
+  function saveEvent(e) { try { localStorage.setItem(EV_KEY, JSON.stringify(e)); } catch (x) {} }
+
   function loadBrand() {
     try {
       var raw = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
@@ -38,6 +46,7 @@
     brand: loadBrand(),
     quality: 'high', format: null, scope: 'one', safe: false,
     targetLen: 30, vibe: 'hype', building: false, analyses: {}, undoSnapshot: null,
+    mode: 'recap', roll: 0, event: loadEvent(), wordsSnapshot: null,
     exporting: false, pct: 0, fast: null,
     exportUrl: null, exportName: '', exportSize: '',
     tab: null
@@ -48,6 +57,8 @@
    'rail','addBtn','fileInput','sheet','sheetTitle','sheetClose','sheetGrow','sheetGrab','tabbar','brandBtn',
    'miniPlay','miniClock','miniBar','miniFill','topbar','transport',
    'lenChips','vibeChips','buildBtn','buildProgress','buildBar','buildStatus','undoBuild','buildNote',
+   'modeChips','evName','evDate','evVenue','evCity','evDoors','evGenre','evLineup','evTickets',
+   'writeBtn','rerollBtn','undoWords','writeNote',
    'tplChips','tplHint','bdChips','bdOpacityRow','bdOpacity','bdOpacityOut','rotateBtn','resetPosBtn',
    'fieldsGrp','fieldsLbl','fields','boxesGrp','boxChips','boxEditor','boxText','boxSize','boxSizeOut',
    'boxFonts','boxColors','delBox','boxStart','boxEnd','boxStartNow','boxEndNow','safeBtn','tStart','tEnd','animChips','dupNext',
@@ -87,7 +98,7 @@
       v: 1,
       aspect: state.aspect, sel: state.sel, quality: state.quality,
       scope: state.scope, safe: state.safe, brand: state.brand,
-      targetLen: state.targetLen, vibe: state.vibe,
+      targetLen: state.targetLen, vibe: state.vibe, mode: state.mode, roll: state.roll,
       clips: state.clips.map(function (c) {
         return {
           id: c.id, name: c.name, duration: c.duration, thumb: c.thumb,
@@ -135,6 +146,8 @@
         state.safe = !!proj.safe;
         if (proj.targetLen) state.targetLen = proj.targetLen;
         if (proj.vibe) state.vibe = proj.vibe;
+        if (proj.mode) state.mode = proj.mode;
+        if (proj.roll) state.roll = proj.roll;
         if (proj.brand) { state.brand = Object.assign({}, DEF_BRAND, proj.brand); }
         var wanted = restored.filter(function (c) { return c.id === proj.sel; })[0] || restored[0];
         restoring = false;
@@ -864,6 +877,19 @@
           : state.clips.length + ' clips loaded. Nothing is deleted; unused clips just get trimmed out of the cut and you can undo.')
       : 'Add clips first.';
 
+    fill(el.modeChips, [['recap', 'Recap (it happened)'], ['promo', 'Promo (coming up)']].map(function (p) {
+      return chipButton(p[1], state.mode === p[0], function () { state.mode = p[0]; render(); });
+    }));
+    EV_FIELDS.forEach(function (f) {
+      if (document.activeElement !== el[f[0]]) el[f[0]].value = state.event[f[1]] || '';
+    });
+    el.writeBtn.disabled = !state.clips.length;
+    el.rerollBtn.hidden = !state.wordsSnapshot;
+    el.undoWords.hidden = !state.wordsSnapshot;
+    el.writeNote.textContent = eventFilled()
+      ? 'Fills every clip in the cut — a statement to open, footage in the middle, the details to close. Saved for next time.'
+      : 'Enter the event once. Every clip gets its words from it, and it is remembered for next time.';
+
     // --- brand
     [['cBlack', 'black'], ['cGold', 'gold'], ['cAccent', 'accent']].forEach(function (p) {
       if (document.activeElement !== el[p[0]]) el[p[0]].value = brand[p[1]];
@@ -1168,6 +1194,69 @@
     }
   }
 
+  // ---------------------------------------------------------------- words
+
+  var EV_FIELDS = [['evName', 'event'], ['evDate', 'date'], ['evVenue', 'venue'], ['evCity', 'city'],
+                   ['evDoors', 'doors'], ['evGenre', 'genre'], ['evLineup', 'lineup'], ['evTickets', 'tickets']];
+
+  function eventFilled() {
+    return !!(state.event.event || state.event.date || state.event.lineup);
+  }
+
+  function snapshotWords() {
+    return state.clips.map(function (c) {
+      return {
+        id: c.id, template: c.template,
+        templates: (c.templates || []).slice(),
+        valsByTpl: JSON.parse(JSON.stringify(c.valsByTpl || {}))
+      };
+    });
+  }
+
+  function undoWords() {
+    if (!state.wordsSnapshot) return;
+    var byId = {};
+    state.clips.forEach(function (c) { byId[c.id] = c; });
+    state.wordsSnapshot.forEach(function (w) {
+      var c = byId[w.id];
+      if (!c) return;
+      c.template = w.template;
+      c.templates = w.templates;
+      c.valsByTpl = w.valsByTpl;
+    });
+    state.wordsSnapshot = null;
+    fieldsSig = '';
+    render();
+    requestDraw();
+    toast('Words put back.');
+  }
+
+  function writeWords(reroll) {
+    if (!window.CopyPack) return;
+    if (!eventFilled()) { toast('Fill in at least the event name or date first.', 'err'); return; }
+    var list = activeClips();
+    if (!list.length) { toast('Add clips first.'); return; }
+
+    if (!reroll) state.wordsSnapshot = snapshotWords();
+    if (reroll) state.roll += 1;
+
+    var gen = window.CopyPack.generate(state.event, state.mode, state.roll);
+    list.forEach(function (c, i) {
+      var id = gen.templateFor(i, list.length);
+      c.template = id;
+      c.templates = [id];
+      var byTpl = Object.assign({}, c.valsByTpl);
+      byTpl[id] = gen.valsFor(id, i);
+      c.valsByTpl = byTpl;
+    });
+
+    fieldsSig = '';
+    render();
+    requestDraw();
+    toast(reroll ? 'New wording across ' + list.length + ' clips.'
+                 : 'Words written across ' + list.length + ' clips. Tap Text to edit any of them.');
+  }
+
   // ---------------------------------------------------------------- events
 
   el.addBtn.addEventListener('click', function () { el.fileInput.click(); });
@@ -1210,6 +1299,18 @@
   el.sheetClose.addEventListener('click', function () { openTab(state.tab); });
   el.brandBtn.addEventListener('click', function () { openTab('brand'); });
   el.buildBtn.addEventListener('click', autoBuild);
+  EV_FIELDS.forEach(function (f) {
+    el[f[0]].addEventListener('input', function () {
+      state.event[f[1]] = el[f[0]].value;
+      saveEvent(state.event);
+      el.writeNote.textContent = eventFilled()
+        ? 'Fills every clip in the cut — a statement to open, footage in the middle, the details to close. Saved for next time.'
+        : 'Enter the event once. Every clip gets its words from it, and it is remembered for next time.';
+    });
+  });
+  el.writeBtn.addEventListener('click', function () { writeWords(false); });
+  el.rerollBtn.addEventListener('click', function () { writeWords(true); });
+  el.undoWords.addEventListener('click', undoWords);
   el.undoBuild.addEventListener('click', undoBuild);
   // Drag the grabber to resize; a tap cycles through the snap points.
   (function () {

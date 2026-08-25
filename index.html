@@ -13,8 +13,8 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="stylesheet" href="./styles.css?v=11">
-<link rel="stylesheet" href="./fonts.css?v=11">
+<link rel="stylesheet" href="./styles.css?v=12">
+<link rel="stylesheet" href="./fonts.css?v=12">
 <link rel="preload" as="font" type="font/woff2" href="./fonts/anton-400-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="./fonts/space-grotesk-400-latin.woff2" crossorigin>
 </head>
@@ -93,6 +93,28 @@
           </div>
           <button class="btn ghost" id="undoBuild" style="margin-top:10px;" hidden>Undo auto-build</button>
           <p class="hint" id="buildNote"></p>
+        </section>
+        <section class="grp">
+          <span class="lbl">The event</span>
+          <div class="chips row" id="modeChips"></div>
+          <div class="split2" style="margin-top:12px;">
+            <label class="field"><span>Event name</span><input type="text" id="evName" placeholder="Kultur Saturdays"></label>
+            <label class="field"><span>Date</span><input type="text" id="evDate" placeholder="Sat Aug 22"></label>
+          </div>
+          <div class="split2">
+            <label class="field"><span>Venue</span><input type="text" id="evVenue" placeholder="Spirit Hall"></label>
+            <label class="field"><span>Neighbourhood</span><input type="text" id="evCity" placeholder="Lawrenceville"></label>
+          </div>
+          <div class="split2">
+            <label class="field"><span>Doors</span><input type="text" id="evDoors" placeholder="Doors 10PM"></label>
+            <label class="field"><span>Sound</span><input type="text" id="evGenre" placeholder="Amapiano"></label>
+          </div>
+          <label class="field"><span>Lineup (one per line)</span><textarea id="evLineup" rows="3" placeholder="DJ Selecta Roy&#10;Kween B"></textarea></label>
+          <label class="field"><span>Ticket line</span><input type="text" id="evTickets" placeholder="Tickets in bio"></label>
+          <button class="btn primary" id="writeBtn">WRITE THE WORDS</button>
+          <button class="btn ghost" id="rerollBtn" style="margin-top:10px;" hidden>Different wording</button>
+          <button class="btn ghost" id="undoWords" style="margin-top:10px;" hidden>Undo the words</button>
+          <p class="hint" id="writeNote"></p>
         </section>
       </div>
 
@@ -257,10 +279,11 @@
 
 </div>
 
-<script src="./store.js?v=11"></script>
-<script src="./autocut.js?v=11"></script>
-<script src="./captions-engine.js?v=11"></script>
-<script src="./mp4-export.js?v=11"></script>
-<script src="./app.js?v=11"></script>
+<script src="./store.js?v=12"></script>
+<script src="./autocut.js?v=12"></script>
+<script src="./copy.js?v=12"></script>
+<script src="./captions-engine.js?v=12"></script>
+<script src="./mp4-export.js?v=12"></script>
+<script src="./app.js?v=12"></script>
 </body>
 </html>

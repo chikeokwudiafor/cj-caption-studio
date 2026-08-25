@@ -13,8 +13,8 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="stylesheet" href="./styles.css?v=16">
-<link rel="stylesheet" href="./fonts.css?v=16">
+<link rel="stylesheet" href="./styles.css?v=17">
+<link rel="stylesheet" href="./fonts.css?v=17">
 <link rel="preload" as="font" type="font/woff2" href="./fonts/anton-400-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="./fonts/space-grotesk-400-latin.woff2" crossorigin>
 </head>
@@ -266,10 +266,11 @@
         </section>
         <section class="grp">
           <span class="lbl">Live copywriting (optional)</span>
-          <p class="hint" style="margin-top:0;">Everything works without this. Paste a free Google AI Studio key and "Write the words" will generate fresh copy instead of drawing on the built-in bank. The key is stored only in this browser, and your event details are sent to Google when you use it. Leave it empty to stay fully offline.</p>
+          <p class="hint" style="margin-top:0;">Everything works without this. Paste a key and "Write the words" generates fresh copy instead of drawing on the built-in bank — an <strong>Anthropic</strong> key (starts <code>sk-ant-</code>) uses Claude, a <strong>Google AI Studio</strong> key uses Gemini. Detected automatically. The key is stored only in this browser and goes nowhere except that provider, along with your event details, when you use it. Leave it empty to stay fully offline.</p>
+          <p class="hint" id="keyWho" style="color:var(--gold);"></p>
           <label class="field" style="margin-top:12px;">
             <span>API key</span>
-            <input type="password" id="aiKey" placeholder="Leave empty for offline copy" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <input type="password" id="aiKey" placeholder="sk-ant-… or a Google AI Studio key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
           </label>
           <button class="btn ghost" id="clearKey">Remove key</button>
         </section>
@@ -288,11 +289,11 @@
 
 </div>
 
-<script src="./store.js?v=16"></script>
-<script src="./autocut.js?v=16"></script>
-<script src="./copy.js?v=16"></script>
-<script src="./captions-engine.js?v=16"></script>
-<script src="./mp4-export.js?v=16"></script>
-<script src="./app.js?v=16"></script>
+<script src="./store.js?v=17"></script>
+<script src="./autocut.js?v=17"></script>
+<script src="./copy.js?v=17"></script>
+<script src="./captions-engine.js?v=17"></script>
+<script src="./mp4-export.js?v=17"></script>
+<script src="./app.js?v=17"></script>
 </body>
 </html>

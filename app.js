@@ -36,12 +36,14 @@
     try { v ? localStorage.setItem(KEY_KEY, v) : localStorage.removeItem(KEY_KEY); } catch (e) {}
   }
 
-  // Ask Gemini for the same shape the copy pack produces, so callers cannot tell
-  // the difference and a failure can fall straight back to the bank.
-  function aiWrite(profile, mode, slots) {
-    var key = loadKey();
-    if (!key) return Promise.reject(new Error('no key'));
-    var prompt = [
+  // Which provider a key belongs to, from its shape. Anthropic keys start sk-ant-.
+  function keyProvider(k) {
+    if (!k) return null;
+    return /^sk-ant-/.test(k) ? 'claude' : 'gemini';
+  }
+
+  function copyPrompt(profile, mode, slots) {
+    return [
       'You write short on-screen text for social videos for a Pittsburgh event promoter.',
       'Voice: ALL CAPS, short, punchy, declarative, confident. Middle dots between facts.',
       'Never invent facts that are not given. Never add hashtags, emoji or quotation marks.',
@@ -54,24 +56,80 @@
       '',
       'Return ONLY a JSON array with exactly ' + slots.length + ' objects, in order, matching these shapes:',
       JSON.stringify(slots, null, 1),
-      'Each object must have exactly the keys shown for its template. Values are strings.'
+      'Each object must have exactly the keys shown for its template. Values are strings.',
+      'Output raw JSON only — no prose, no markdown fence.'
     ].join('\n');
+  }
 
+  // Models can wrap JSON in prose or a fence; take the array either way.
+  function parseArray(txt, expected) {
+    var t = String(txt).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    var arr;
+    try { arr = JSON.parse(t); }
+    catch (e) {
+      var a = t.indexOf('['), b = t.lastIndexOf(']');
+      if (a < 0 || b <= a) throw new Error('no JSON in reply');
+      arr = JSON.parse(t.slice(a, b + 1));
+    }
+    if (!Array.isArray(arr) || arr.length !== expected) throw new Error('wrong shape');
+    return arr;
+  }
+
+  function withTimeout(ms) {
+    var ctl = new AbortController();
+    var t = setTimeout(function () { ctl.abort(); }, ms);
+    return { signal: ctl.signal, done: function () { clearTimeout(t); } };
+  }
+
+  /* Claude, called straight from the page. The dangerous-direct-browser-access
+     header is what makes the browser's CORS preflight pass; without it the
+     request never leaves the page. The key stays in this browser. */
+  function claudeWrite(key, profile, mode, slots) {
+    var to = withTimeout(60000);
+    return fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: to.signal,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'low' },   // short copy; keeps it quick and cheap
+        messages: [{ role: 'user', content: copyPrompt(profile, mode, slots) }]
+      })
+    }).then(function (r) {
+      to.done();
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
+        return j;
+      });
+    }).then(function (j) {
+      if (j.stop_reason === 'refusal') throw new Error('declined that request');
+      var text = (j.content || []).filter(function (b) { return b.type === 'text'; })
+        .map(function (b) { return b.text; }).join('').trim();
+      if (!text) throw new Error('empty reply');
+      return parseArray(text, slots.length);
+    }).catch(function (e) { to.done(); throw e; });
+  }
+
+  function geminiWrite(key, profile, mode, slots) {
+    var to = withTimeout(60000);
     var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' +
               encodeURIComponent(key);
-    var ctl = new AbortController();
-    var timer = setTimeout(function () { ctl.abort(); }, 20000);
-
     return fetch(url, {
       method: 'POST',
+      signal: to.signal,
       headers: { 'Content-Type': 'application/json' },
-      signal: ctl.signal,
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: copyPrompt(profile, mode, slots) }] }],
         generationConfig: { temperature: 1.0, responseMimeType: 'application/json' }
       })
     }).then(function (r) {
-      clearTimeout(timer);
+      to.done();
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (j) {
@@ -79,10 +137,23 @@
                 j.candidates[0].content.parts && j.candidates[0].content.parts[0] &&
                 j.candidates[0].content.parts[0].text;
       if (!txt) throw new Error('empty reply');
-      var arr = JSON.parse(txt);
-      if (!Array.isArray(arr) || arr.length !== slots.length) throw new Error('wrong shape');
-      return arr;
-    }).catch(function (e) { clearTimeout(timer); throw e; });
+      return parseArray(txt, slots.length);
+    }).catch(function (e) { to.done(); throw e; });
+  }
+
+  function keyLabel() {
+    var who = keyProvider(loadKey());
+    if (who === 'claude') return 'Claude (Opus 5) will write the copy.';
+    if (who === 'gemini') return 'Google Gemini will write the copy.';
+    return 'No key — the built-in bank writes the copy, offline and free.';
+  }
+
+  function aiWrite(profile, mode, slots) {
+    var key = loadKey();
+    var who = keyProvider(key);
+    if (!who) return Promise.reject(new Error('no key'));
+    return who === 'claude' ? claudeWrite(key, profile, mode, slots)
+                            : geminiWrite(key, profile, mode, slots);
   }
 
   function loadBrand() {
@@ -121,7 +192,7 @@
    'trimLbl','trimbar','cutL','cutR','keepBox','trimPh','trimL','trimR','setStart','setEnd','splitBtn','resetTrim',
    'moveL','moveR','removeClip','startOver',
    'scopeChips','formatGrp','formatChips','qualityChips','exportBtn','exportProgress','exportBar','exportPctText','exportDl','saveHint','formatNote',
-   'cBlack','cGold','cAccent','bHandles','headFonts','bodyFonts','resetBrand','aiKey','clearKey'
+   'cBlack','cGold','cAccent','bHandles','headFonts','bodyFonts','resetBrand','aiKey','clearKey','keyWho'
   ].forEach(function (k) { el[k] = $(k); });
 
   var video = el.video, canvas = el.canvas, ctx = canvas.getContext('2d');
@@ -946,7 +1017,10 @@
       if (document.activeElement !== el[f[0]]) el[f[0]].value = state.event[f[1]] || '';
     });
     el.writeBtn.disabled = !state.clips.length || state.writing;
-    el.writeBtn.textContent = state.writing ? 'WRITING…' : 'WRITE THE WORDS';
+    var who = keyProvider(loadKey());
+    el.writeBtn.textContent = state.writing
+      ? (who === 'claude' ? 'ASKING CLAUDE…' : 'WRITING…')
+      : (who === 'claude' ? 'WRITE THE WORDS WITH CLAUDE' : 'WRITE THE WORDS');
     el.rerollBtn.hidden = !state.wordsSnapshot;
     el.undoWords.hidden = !state.wordsSnapshot;
     el.writeNote.textContent = eventFilled()
@@ -960,6 +1034,7 @@
     if (document.activeElement !== el.bHandles) el.bHandles.value = brand.handles;
     if (document.activeElement !== el.aiKey) el.aiKey.value = loadKey();
     el.clearKey.hidden = !loadKey();
+    el.keyWho.textContent = keyLabel();
     fill(el.headFonts, FONTS_HEAD.map(function (n) {
       return chipButton(n, brand.headFont === n, function () { setBrand({ headFont: n }); }, { font: n });
     }));
@@ -1374,7 +1449,7 @@
         apply(vals, true);
       }).catch(function (e) {
         apply(plan.map(function (p) { return p.vals; }), false);
-        toast('Live copy did not work (' + (e && e.message) + ') — used the built-in bank instead.');
+        toast('Live copy did not work (' + (e && e.message) + ') — used the built-in bank instead.', 'err');
       }).then(function () {
         state.writing = false;
         render();
@@ -1751,7 +1826,12 @@
   el.cGold.addEventListener('input', function () { setBrand({ gold: el.cGold.value }); });
   el.cAccent.addEventListener('input', function () { setBrand({ accent: el.cAccent.value }); });
   el.bHandles.addEventListener('input', function () { setBrand({ handles: el.bHandles.value }); });
-  el.aiKey.addEventListener('input', function () { saveKey(el.aiKey.value.trim()); el.clearKey.hidden = !el.aiKey.value.trim(); });
+  el.aiKey.addEventListener('input', function () {
+    saveKey(el.aiKey.value.trim());
+    el.clearKey.hidden = !el.aiKey.value.trim();
+    el.keyWho.textContent = keyLabel();
+    render();
+  });
   el.clearKey.addEventListener('click', function () {
     saveKey(''); el.aiKey.value = ''; render(); toast('Key removed. Copy stays offline.');
   });

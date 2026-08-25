@@ -83,6 +83,26 @@ The panel UI builds itself from `fields`, so nothing else needs touching.
 1080×1920, so a phone is not shading two megapixels per frame just to show a
 preview. Export still renders at full resolution.
 
+## Copywriting
+
+`copy.js` holds an authored bank in the house voice, crossed with the event
+profile. That is the default and needs no key, no network and no account.
+
+A key pasted in the brand panel upgrades it, and the provider is detected from the
+key's shape — `sk-ant-…` calls Claude (`claude-opus-5`), anything else is treated
+as a Google AI Studio key and calls Gemini. Both return the same JSON shape the
+pack produces, so the rest of the app cannot tell which one ran.
+
+Calling Claude straight from a static page needs the header
+`anthropic-dangerous-direct-browser-access: true` — without it the browser's CORS
+preflight fails and the request never leaves the page. Verified from
+`http://localhost`: no header gives `TypeError: Failed to fetch`, with the header
+the request reaches Anthropic and returns a normal JSON error for a bad key.
+
+The pack is the floor, never a placeholder. A bad key, a refusal, a network
+failure or a malformed reply all fall back to it, and any single field the model
+leaves blank keeps the pack's value.
+
 ## Export notes
 
 There are two export paths and the app picks automatically.

@@ -35,9 +35,19 @@ measurable, so `autocut.js` measures them:
    seek per sample, so it only runs on the two or three windows that already
    scored well on audio.
 
-Clips scoring under 28% of the best one are left out of the cut rather than
-padding it. Nothing is deleted — excluded clips stay in the rail marked `out`,
-and the `+` button on a clip card puts one back.
+A long clip holds several good moments, so each one contributes as many
+non-overlapping windows as the target needs — a 40s clip might give six. Each
+extra moment becomes its own entry sharing the same stored video (`srcId`), the
+way Split already works. Without this a 30s target built from three long clips
+came back 15s long.
+
+Windows scoring under 28% of the best are left out rather than padding the cut.
+Nothing is deleted — excluded clips stay in the rail marked `out`, and the `+`
+button on a clip card puts one back.
+
+Measured on real event footage (23s, 42s and 28s clips): analysis 216ms, full
+build 3.2s, and a 30s target produces a 28s cut of fourteen 2s moments, snapped to
+four beats at the 120 BPM it detected.
 
 No build step, no bundler, no framework. Edit a file, commit, push — GitHub Pages
 serves it directly. The only external request is the Google Fonts stylesheet, and

@@ -138,27 +138,59 @@
 
   // ---------------------------------------------------------------- windows
 
-  // Best contiguous window of `len` seconds by mean energy, with a small penalty
-  // on the very start of a clip where the camera is usually still settling.
-  function bestWindow(env, hop, duration, len) {
-    if (!env || !env.length) return { start: Math.max(0, (duration - len) / 2), score: 0 };
-    var w = Math.max(1, Math.round(len / hop));
-    if (w >= env.length) return { start: 0, score: mean(env, 0, env.length) };
+  function mean(arr, a, b) { var s = 0; for (var i = a; i < b; i++) s += arr[i]; return (b > a) ? s / (b - a) : 0; }
 
+  /* Rolling mean energy over every window of `len` seconds. */
+  function rollingScores(env, hop, len) {
+    var w = Math.max(1, Math.round(len / hop));
+    if (w >= env.length) return null;
+    var roll = new Float32Array(env.length - w + 1);
     var sum = 0;
     for (var i = 0; i < w; i++) sum += env[i];
-    var bestSum = -Infinity, bestI = 0;
-    for (var s = 0; s + w <= env.length; s++) {
-      if (s > 0) sum += env[s + w - 1] - env[s - 1];
-      var t = s * hop;
-      var penalty = t < 0.5 ? 0.75 : 1;                    // ignore the settling-in shot
-      var score = (sum / w) * penalty;
-      if (score > bestSum) { bestSum = score; bestI = s; }
-    }
-    return { start: clamp(bestI * hop, 0, Math.max(0, duration - len)), score: bestSum };
+    roll[0] = sum / w;
+    for (var s = 1; s + w <= env.length; s++) { sum += env[s + w - 1] - env[s - 1]; roll[s] = sum / w; }
+    // The opening moment is usually the camera still settling.
+    for (var k = 0; k < roll.length && k * hop < 0.5; k++) roll[k] *= 0.75;
+    return { roll: roll, w: w };
   }
 
-  function mean(arr, a, b) { var s = 0; for (var i = a; i < b; i++) s += arr[i]; return (b > a) ? s / (b - a) : 0; }
+  function bestWindow(env, hop, duration, len) {
+    if (!env || !env.length) return { start: Math.max(0, (duration - len) / 2), score: 0 };
+    var r = rollingScores(env, hop, len);
+    if (!r) return { start: 0, score: mean(env, 0, env.length) };
+    var best = -Infinity, bi = 0;
+    for (var s = 0; s < r.roll.length; s++) if (r.roll[s] > best) { best = r.roll[s]; bi = s; }
+    return { start: clamp(bi * hop, 0, Math.max(0, duration - len)), score: best };
+  }
+
+  /* The best non-overlapping windows in one clip, strongest first. A 40s clip
+     holds several good moments; taking only one is why a 30s target used to come
+     back 15s long. */
+  function candidatesFor(a, duration, len, maxCount) {
+    var hop = (a && a.hop) || HOP;
+    var env = a && a.env;
+    var out = [];
+    var latest = Math.max(0, duration - len);
+
+    if (!env || !env.length) {
+      var n = Math.max(1, Math.min(maxCount, Math.floor(duration / len)));
+      for (var i = 0; i < n; i++) out.push({ start: clamp(i * (duration / n), 0, latest), score: 0 });
+      return out;
+    }
+    var r = rollingScores(env, hop, len);
+    if (!r) return [{ start: 0, score: mean(env, 0, env.length) }];
+
+    var taken = new Uint8Array(r.roll.length);
+    for (var c = 0; c < maxCount; c++) {
+      var best = -Infinity, bi = -1;
+      for (var s = 0; s < r.roll.length; s++) if (!taken[s] && r.roll[s] > best) { best = r.roll[s]; bi = s; }
+      if (bi < 0 || best <= 0) break;
+      out.push({ start: clamp(bi * hop, 0, latest), score: best });
+      var from = Math.max(0, bi - r.w), to = Math.min(r.roll.length - 1, bi + r.w);
+      for (var b = from; b <= to; b++) taken[b] = 1;   // no overlapping picks
+    }
+    return out;
+  }
 
   // ---------------------------------------------------------------- public
 
@@ -182,108 +214,94 @@
     return out;
   }
 
-  /* Refine the chosen clips with motion, which costs a seek per sample. */
+  /* Nudge each chosen window to the busiest nearby framing. Costs a seek per
+     sample, so it only ever looks just either side of what audio already chose. */
   async function refine(picks, analyses, segLen, onProgress) {
+    var byUrl = {};
     for (var i = 0; i < picks.length; i++) {
       var p = picks[i];
       if (onProgress) onProgress(i / picks.length);
-      var a = analyses[p.id];
       try {
-        var v = await loadVideo(p.url);
-        // Compare a few candidate windows and keep the busiest one.
-        var cands = candidateWindows(a, segLen, p.duration);
+        if (!byUrl[p.url]) byUrl[p.url] = await loadVideo(p.url);
+        var v = byUrl[p.url];
+        var shift = segLen * 0.5;
+        var latest = Math.max(0, p.duration - segLen);
+        var cands = [p.start, clamp(p.start - shift, 0, latest), clamp(p.start + shift, 0, latest)]
+          .filter(function (t, idx, arr) { return arr.indexOf(t) === idx; });
         var best = null;
         for (var k = 0; k < cands.length; k++) {
-          var to = Math.min(p.duration, cands[k] + segLen);
-          var m = await motionScore(v, cands[k], to, 4);
+          var m = await motionScore(v, cands[k], Math.min(p.duration, cands[k] + segLen), 3);
           if (!best || m > best.motion) best = { start: cands[k], motion: m };
         }
-        try { v.pause(); v.removeAttribute('src'); v.remove(); } catch (e) {}
         if (best) { p.start = best.start; p.motion = best.motion; }
       } catch (e) { /* keep the audio-only choice */ }
     }
+    Object.keys(byUrl).forEach(function (u) {
+      try { byUrl[u].pause(); byUrl[u].removeAttribute('src'); byUrl[u].remove(); } catch (e) {}
+    });
     if (onProgress) onProgress(1);
     return picks;
   }
 
-  function candidateWindows(a, segLen, duration) {
-    var list = [];
-    if (a && a.env && a.env.length) {
-      var top = bestWindow(a.env, a.hop, duration, segLen);
-      list.push(top.start);
-      // two alternates, so motion gets a say rather than only confirming audio
-      var third = Math.max(0, duration - segLen);
-      list.push(clamp(third * 0.33, 0, third));
-      list.push(clamp(third * 0.66, 0, third));
-    } else {
-      var span = Math.max(0, duration - segLen);
-      list.push(span * 0.25, span * 0.5, span * 0.75);
-    }
-    // dedupe near-identical starts
-    var seen = [];
-    return list.filter(function (v) {
-      if (seen.some(function (s) { return Math.abs(s - v) < 0.4; })) return false;
-      seen.push(v); return true;
-    });
-  }
-
-  /* Decide which clips make the cut and how long each segment runs. */
+  /* Choose the segments that make up the cut. Several may come from one clip. */
   function plan(clips, analyses, targetSec, vibe) {
-    var scored = clips.map(function (c) {
+    var idealSeg = vibe === 'hype' ? 2.2 : 3.4;
+    var nSegs = Math.max(1, Math.round(targetSec / idealSeg));
+    var segLen = clamp(targetSec / nSegs, MIN_SEG, MAX_SEG);
+    nSegs = Math.max(1, Math.round(targetSec / segLen));
+
+    var usable = clips.map(function (c, i) {
       var a = analyses[c.id] || {};
-      var dur = a.duration || c.duration || 0;
-      var probe = Math.min(3, Math.max(1, dur * 0.5));
-      var w = bestWindow(a.env, a.hop || HOP, dur, probe);
-      return { id: c.id, url: c.url, name: c.name, duration: dur, score: w.score, start: w.start, tempo: a.tempo || 0 };
-    }).filter(function (c) { return c.duration > 0.5; });
+      return { c: c, a: a, dur: a.duration || c.duration || 0, order: i };
+    }).filter(function (u) { return u.dur > 0.5; });
+    if (!usable.length) return null;
 
-    if (!scored.length) return null;
+    // Spread the load: no single clip should carry the whole cut if others exist.
+    var perClipCap = Math.max(1, Math.ceil(nSegs / usable.length) + 1);
 
-    // How many clips can we fit while keeping segments watchable?
-    var maxClips = Math.max(1, Math.floor(targetSec / MIN_SEG));
-    var wantClips = clamp(Math.round(targetSec / (vibe === 'hype' ? 2.0 : 3.2)), 1, maxClips);
-    wantClips = Math.min(wantClips, scored.length);
+    var all = [];
+    usable.forEach(function (u) {
+      var len = Math.min(segLen, u.dur);
+      var fits = Math.max(1, Math.floor(u.dur / len));
+      candidatesFor(u.a, u.dur, len, Math.min(perClipCap, fits)).forEach(function (w) {
+        all.push({
+          id: u.c.id, url: u.c.url, name: u.c.name, duration: u.dur, order: u.order,
+          start: w.start, score: w.score, tempo: u.a.tempo || 0
+        });
+      });
+    });
+    if (!all.length) return null;
 
-    var byScore = scored.slice().sort(function (a, b) { return b.score - a.score; });
+    all.sort(function (a, b) { return b.score - a.score; });
 
-    // Leave out the duds. A clip scoring a fraction of the best one is footage of
-    // the floor or an empty room, and padding a recap with it makes it worse.
-    var top = byScore[0].score;
-    var floor = top * 0.28;
-    var keep = byScore.filter(function (c) { return c.score >= floor; });
-    var dropped = byScore.length - keep.length;
-    if (!keep.length) { keep = byScore.slice(0, 1); dropped = byScore.length - 1; }
+    // Leave out the duds — footage of the floor, or an empty room.
+    var top = all[0].score;
+    var kept = all.filter(function (w) { return w.score >= top * 0.28; });
+    var pool = kept.length ? kept : all.slice(0, 1);
+    var picks = pool.slice(0, nSegs);
 
-    var picks = keep.slice(0, wantClips);
-    dropped += Math.max(0, keep.length - picks.length);
+    var used = {};
+    picks.forEach(function (p) { used[p.id] = 1; });
+    var dropped = usable.filter(function (u) { return !used[u.c.id]; }).length;
 
-    var segLen = clamp(targetSec / Math.max(1, picks.length), MIN_SEG, MAX_SEG);
-
-    // If the footage has a steady tempo, round segments to whole beats so the
-    // cuts land with the music instead of against it.
+    // With a steady tempo, round segments to whole beats so cuts land with it.
     var tempos = picks.map(function (p) { return p.tempo; }).filter(function (t) { return t > 0; });
     if (tempos.length) {
       tempos.sort(function (a, b) { return a - b; });
-      var bpm = tempos[Math.floor(tempos.length / 2)];
-      var beat = 60 / bpm;
+      var beat = 60 / tempos[Math.floor(tempos.length / 2)];
       var beats = Math.max(2, Math.round(segLen / beat));
       var snapped = beats * beat;
       if (snapped >= MIN_SEG && snapped <= MAX_SEG) segLen = snapped;
     }
 
-    // Open on the strongest clip — that is the hook — then run the rest in the
-    // order they were shot, which reads as a night unfolding.
+    // Open on the strongest moment, then run in the order the night happened.
     var hook = picks[0];
-    var original = {};
-    clips.forEach(function (c, i) { original[c.id] = i; });
-    var rest = picks.slice(1).sort(function (a, b) { return original[a.id] - original[b.id]; });
+    var rest = picks.slice(1).sort(function (a, b) {
+      return (a.order - b.order) || (a.start - b.start);
+    });
     var ordered = [hook].concat(rest);
-
     ordered.forEach(function (p) {
-      var len = Math.min(segLen, Math.max(0.4, p.duration));
-      var w = bestWindow(analyses[p.id] && analyses[p.id].env, HOP, p.duration, len);
-      p.start = clamp(w.start, 0, Math.max(0, p.duration - len));
-      p.len = len;
+      p.len = Math.min(segLen, Math.max(0.4, p.duration - p.start));
     });
 
     return {

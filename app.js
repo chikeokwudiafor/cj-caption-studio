@@ -157,7 +157,7 @@
       targetLen: state.targetLen, vibe: state.vibe, mode: state.mode, roll: state.roll,
       clips: state.clips.map(function (c) {
         return {
-          id: c.id, name: c.name, duration: c.duration, thumb: c.thumb,
+          id: c.id, srcId: c.srcId, name: c.name, duration: c.duration, thumb: c.thumb,
           trimStart: c.trimStart, trimEnd: c.trimEnd,
           template: c.template, templates: c.templates,
           valsByTpl: c.valsByTpl, tplOffset: c.tplOffset,
@@ -190,8 +190,12 @@
         blobs.forEach(function (b) { byId[b.id] = b; });
 
         restoring = true;
-        var restored = proj.clips.filter(function (c) { return byId[c.id]; }).map(function (c) {
-          return Object.assign({}, c, { url: URL.createObjectURL(byId[c.id].blob) });
+        // Clones share one stored video, addressed by srcId.
+        var urls = {};
+        var restored = proj.clips.filter(function (c) { return byId[c.srcId || c.id]; }).map(function (c) {
+          var key = c.srcId || c.id;
+          if (!urls[key]) urls[key] = URL.createObjectURL(byId[key].blob);
+          return Object.assign({}, c, { url: urls[key] });
         });
         if (!restored.length) { restoring = false; return false; }
 
@@ -525,7 +529,9 @@
     var shared = state.clips.some(function (x) { return x.id !== id && x.url === c.url; });
     if (!shared) URL.revokeObjectURL(c.url);
     state.clips = state.clips.filter(function (x) { return x.id !== id; });
-    if (storeOk) window.Store.deleteClip(id).catch(function () {});
+    var blobId = c.srcId || c.id;
+    var stillUsed = state.clips.some(function (x) { return (x.srcId || x.id) === blobId; });
+    if (storeOk && !stillUsed) window.Store.deleteClip(blobId).catch(function () {});
     if (state.sel === id) {
       state.sel = null;
       video.pause();
@@ -1067,8 +1073,12 @@
   function finishExport(blob, ext, all, clip) {
     state.exporting = false;
     state.exportUrl = URL.createObjectURL(blob);
-    var base = all ? ('joined-' + activeClips().length + '-clips')
-                   : String(clip.name).replace(/\.[^.]+$/, '') + '-captioned';
+    var secs = Math.round(activeClips().reduce(function (a, c) { return a + span(c); }, 0));
+    var evName = (state.event && state.event.event || '').trim();
+    var base = all
+      ? ((evName ? evName.toLowerCase().replace(/\s+/g, '-') + '-' : '') +
+         (state.mode === 'promo' ? 'promo' : 'recap') + '-' + secs + 's')
+      : String(clip.name).replace(/\.[^.]+$/, '') + '-captioned';
     state.exportName = base.replace(/[^\w\-. ]+/g, '_') + '.' + (ext || 'mp4');
     state.exportSize = fileSize(blob.size);
     render();
@@ -1220,17 +1230,36 @@
       // to a zero-length tail so nothing is destroyed.
       var byId = {};
       state.clips.forEach(function (c) { byId[c.id] = c; });
+      var seen = {};
       var chosen = [];
       result.picks.forEach(function (p) {
-        var c = byId[p.id];
-        if (!c) return;
-        var len = Math.min(p.len, Math.max(0.4, c.duration - p.start));
-        c.trimStart = Math.max(0, p.start);
-        c.trimEnd = Math.min(c.duration, c.trimStart + len);
-        chosen.push(c);
+        var src = byId[p.id];
+        if (!src) return;
+        var target;
+        if (!seen[p.id]) {
+          target = src;
+          seen[p.id] = true;
+        } else {
+          // A second moment from the same clip becomes its own entry, sharing the
+          // same video. srcId keeps it pointing at the one stored copy.
+          target = Object.assign({}, src, {
+            id: uid(),
+            srcId: src.srcId || src.id,
+            valsByTpl: JSON.parse(JSON.stringify(src.valsByTpl || {})),
+            tplOffset: JSON.parse(JSON.stringify(src.tplOffset || {})),
+            timing: Object.assign({}, src.timing),
+            templates: (src.templates || []).slice(),
+            custom: (src.custom || []).map(function (b) { return Object.assign({}, b, { id: uid() }); })
+          });
+        }
+        var len = Math.min(p.len, Math.max(0.4, target.duration - p.start));
+        target.trimStart = Math.max(0, p.start);
+        target.trimEnd = Math.min(target.duration, target.trimStart + len);
+        target.off = false;
+        chosen.push(target);
       });
       var chosenIds = {};
-      chosen.forEach(function (c) { c.off = false; chosenIds[c.id] = true; });
+      chosen.forEach(function (c) { chosenIds[c.id] = true; });
       var leftovers = state.clips.filter(function (c) { return !chosenIds[c.id]; });
       leftovers.forEach(function (c) { c.off = true; });
       state.clips = chosen.concat(leftovers);
@@ -1242,7 +1271,11 @@
       requestDraw();
 
       var secs = chosen.reduce(function (a, c) { return a + span(c); }, 0);
-      var bits = ['Built a ' + secs.toFixed(0) + 's cut from ' + chosen.length + ' clip' + (chosen.length === 1 ? '' : 's')];
+      var sources = {};
+      chosen.forEach(function (c) { sources[c.srcId || c.id] = 1; });
+      var nSrc = Object.keys(sources).length;
+      var bits = ['Built a ' + secs.toFixed(0) + 's cut — ' + chosen.length + ' moment' +
+                  (chosen.length === 1 ? '' : 's') + ' from ' + nSrc + ' clip' + (nSrc === 1 ? '' : 's')];
       if (result.picks.some(function (p) { return p.tempo > 0; })) bits.push('cut to the beat');
       if (result.dropped > 0) bits.push('left out ' + result.dropped + ' quiet one' + (result.dropped === 1 ? '' : 's'));
       toast(bits.join(', ') + '. Play it, then nudge anything you want.');

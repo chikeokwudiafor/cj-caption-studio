@@ -45,7 +45,8 @@
 
   var el = {};
   ['app','stage','frame','video','canvas','empty','emptyAdd','aspectSeg','playBtn','clock','timeline','playhead',
-   'rail','addBtn','fileInput','sheet','sheetTitle','sheetClose','sheetGrow','tabbar','brandBtn',
+   'rail','addBtn','fileInput','sheet','sheetTitle','sheetClose','sheetGrow','sheetGrab','tabbar','brandBtn',
+   'miniPlay','miniClock','miniBar','miniFill','topbar','transport',
    'lenChips','vibeChips','buildBtn','buildProgress','buildBar','buildStatus','undoBuild','buildNote',
    'tplChips','tplHint','bdChips','bdOpacityRow','bdOpacity','bdOpacityOut','rotateBtn','resetPosBtn',
    'fieldsGrp','fieldsLbl','fields','boxesGrp','boxChips','boxEditor','boxText','boxSize','boxSizeOut',
@@ -223,6 +224,41 @@
 
   var rafId = 0, dirty = true, lastClock = 0, hitRects = {};
 
+  // The visual viewport shrinks when the iOS keyboard opens. Driving the app
+  // height from it means the layout compresses instead of scrolling away.
+  var SHEET_MIN = 150;
+  var sheetH = 0;
+
+  function viewportH() {
+    var vv = window.visualViewport;
+    return Math.round(vv ? vv.height : window.innerHeight);
+  }
+
+  function maxSheetH() {
+    // Always leave the preview a usable slice, even with a keyboard up. The
+    // reserve is proportional so short viewports do not collapse the preview.
+    var vh = viewportH();
+    var chrome = el.topbar.offsetHeight + el.tabbar.offsetHeight;
+    return Math.max(SHEET_MIN, Math.min(vh * 0.84, vh - chrome - Math.max(120, vh * 0.26)));
+  }
+
+  function applyViewport() {
+    document.documentElement.style.setProperty('--app-h', viewportH() + 'px');
+    if (!isDesktop()) {
+      if (!sheetH) sheetH = Math.round(viewportH() * 0.38);
+      sheetH = clamp(sheetH, SHEET_MIN, maxSheetH());
+      el.sheet.style.setProperty('--sheet-h', sheetH + 'px');
+    } else {
+      el.sheet.style.removeProperty('--sheet-h');
+    }
+  }
+
+  function setSheetH(px) {
+    sheetH = clamp(Math.round(px), SHEET_MIN, maxSheetH());
+    el.sheet.style.setProperty('--sheet-h', sheetH + 'px');
+    sizeStage();
+  }
+
   function schedule() { if (!rafId) rafId = requestAnimationFrame(loop); }
   function requestDraw() { dirty = true; schedule(); }
 
@@ -232,6 +268,13 @@
     var pad = isDesktop() ? 32 : 16;
     var aw = Math.max(60, el.stage.clientWidth - pad);
     var ah = Math.max(60, el.stage.clientHeight - pad);
+    if (!isDesktop()) {
+      // Compute from the viewport rather than trusting a mid-reflow clientHeight.
+      var open = el.app.dataset.sheet === '1';
+      var used = el.topbar.offsetHeight + el.tabbar.offsetHeight +
+                 (open ? sheetH : (el.rail.offsetHeight + el.transport.offsetHeight));
+      ah = Math.max(60, viewportH() - used - pad);
+    }
     var sc = Math.min(aw / rw, ah / rh);
     var w = Math.max(60, Math.round(rw * sc));
     var h = Math.max(60, Math.round(rh * sc));
@@ -314,7 +357,7 @@
       draw(video.currentTime);
       updatePlayhead();
       var now = performance.now();
-      if (now - lastClock > 180) { lastClock = now; state.time = video.currentTime; renderClock(); }
+      if (now - lastClock > 180) { lastClock = now; state.time = video.currentTime; renderClock(); renderMini(); }
     } else if (dirty) {
       draw(0);
       updatePlayhead();
@@ -497,6 +540,17 @@
   function fill(node, items) {
     node.textContent = '';
     items.forEach(function (n) { node.appendChild(n); });
+  }
+
+  function renderMini() {
+    var clip = cur();
+    var total = seqTotal();
+    var pos = clip ? (seqOffset(clip.id) + clamp(state.time - (clip.trimStart || 0), 0, span(clip))) : 0;
+    el.miniClock.textContent = fmt(pos).replace(/\.\d$/, '');
+    el.miniFill.style.width = (clamp(pos / total, 0, 1) * 100) + '%';
+    el.miniBar.setAttribute('aria-valuenow', String(Math.round(clamp(pos / total, 0, 1) * 100)));
+    el.miniPlay.disabled = !clip;
+    el.miniPlay.innerHTML = state.playing ? '&#10074;&#10074;' : '&#9654;';
   }
 
   function renderClock() {
@@ -860,6 +914,7 @@
     el.playhead.hidden = !has;
     el.playBtn.innerHTML = state.playing ? '&#10074;&#10074;' : '&#9654;';
     renderClock();
+    renderMini();
     renderRail();
     renderTimeline();
     renderPanes();
@@ -875,15 +930,15 @@
     state.tab = same ? null : name;
     el.sheet.dataset.open = state.tab ? '1' : '0';
     el.app.dataset.sheet = state.tab ? '1' : '0';
-    el.sheet.dataset.tall = '0';
-    el.sheetGrow.setAttribute('aria-pressed', 'false');
-    el.sheetGrow.innerHTML = '&#9650;';
     Array.prototype.slice.call(el.sheet.querySelectorAll('.pane')).forEach(function (p) {
       p.dataset.active = p.dataset.pane === state.tab ? '1' : '0';
     });
     if (state.tab) el.sheetTitle.textContent = { build: 'Build', style: 'Style', text: 'Text', trim: 'Trim', export: 'Export', brand: 'Brand kit' }[state.tab] || '';
     render();
-    // Let the flex layout settle, then re-fit the preview into whatever height is left.
+    applyViewport();
+    // Size immediately (offsetHeight forces layout anyway), then once more after
+    // the frame in case anything settled. rAF alone is unreliable in a hidden tab.
+    sizeStage();
     requestAnimationFrame(sizeStage);
   }
 
@@ -1156,13 +1211,47 @@
   el.brandBtn.addEventListener('click', function () { openTab('brand'); });
   el.buildBtn.addEventListener('click', autoBuild);
   el.undoBuild.addEventListener('click', undoBuild);
+  // Drag the grabber to resize; a tap cycles through the snap points.
+  (function () {
+    var SNAPS = [0.30, 0.46, 0.72];
+    function snapPx(f) { return Math.round(viewportH() * f); }
+    el.sheetGrab.addEventListener('pointerdown', function (e) {
+      if (isDesktop()) return;
+      e.preventDefault();
+      var sy = e.clientY, start = sheetH, moved = false;
+      dragWindow(e, function (ev) {
+        if (!moved && Math.abs(ev.clientY - sy) > 4) moved = true;
+        if (moved) setSheetH(start - (ev.clientY - sy));
+      }, function () {
+        if (moved) return;
+        var cur = sheetH / viewportH();
+        var next = SNAPS.filter(function (f) { return f > cur + 0.02; })[0] || SNAPS[0];
+        setSheetH(snapPx(next));
+      });
+    });
+    el.sheetGrab.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSheetH(sheetH + 40); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setSheetH(sheetH - 40); }
+    });
+  })();
+
+  el.miniPlay.addEventListener('click', togglePlay);
+  el.miniBar.addEventListener('pointerdown', function (e) {
+    if (!cur()) return;
+    e.preventDefault();
+    var r = el.miniBar.getBoundingClientRect();
+    var at = function (ev) { return clamp((ev.clientX - r.left) / r.width, 0, 1); };
+    seekSeqFrac(at(e));
+    renderMini();
+    dragWindow(e, function (ev) { seekSeqFrac(at(ev)); renderMini(); });
+  });
+
   el.sheetGrow.addEventListener('click', function () {
-    var tall = el.sheet.dataset.tall !== '1';
-    el.sheet.dataset.tall = tall ? '1' : '0';
+    var tall = sheetH < viewportH() * 0.6;
+    setSheetH(viewportH() * (tall ? 0.72 : 0.30));
     el.sheetGrow.setAttribute('aria-pressed', tall ? 'true' : 'false');
     el.sheetGrow.innerHTML = tall ? '&#9660;' : '&#9650;';
     el.sheetGrow.setAttribute('aria-label', tall ? 'Make this panel shorter' : 'Make this panel taller');
-    requestAnimationFrame(sizeStage);
   });
 
   // timeline scrub
@@ -1451,10 +1540,39 @@
 
   // layout
   var resizeTimer = 0;
-  function onResize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(sizeStage, 60); }
+  function onResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { applyViewport(); sizeStage(); }, 60);
+  }
   window.addEventListener('resize', onResize);
-  window.addEventListener('orientationchange', function () { setTimeout(sizeStage, 220); });
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', function () { setTimeout(onResize, 220); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onResize);
+    window.visualViewport.addEventListener('scroll', onResize);
+  }
+
+  // Typing is when you most want to see the clip, so shrink the panel to suit.
+  var preFocusH = 0;
+  el.sheet.addEventListener('focusin', function (e) {
+    if (isDesktop()) return;
+    var t = e.target.tagName;
+    if (t !== 'INPUT' && t !== 'TEXTAREA') return;
+    preFocusH = sheetH;
+    setTimeout(function () {
+      applyViewport();
+      // Collapse towards the focused field so the clip keeps as much room as
+      // possible while typing; the body scrolls that field into view.
+      setSheetH(Math.min(sheetH, Math.max(SHEET_MIN, viewportH() * 0.34)));
+      if (e.target.scrollIntoView) e.target.scrollIntoView({ block: 'center' });
+    }, 260);
+  });
+  el.sheet.addEventListener('focusout', function () {
+    if (isDesktop() || !preFocusH) return;
+    setTimeout(function () {
+      applyViewport();
+      if (!el.sheet.contains(document.activeElement)) { setSheetH(preFocusH); preFocusH = 0; }
+    }, 260);
+  });
   if (window.ResizeObserver) new ResizeObserver(sizeStage).observe(el.stage);
 
   window.matchMedia('(min-width: 900px)').addEventListener('change', function (m) {
@@ -1505,8 +1623,9 @@
     });
   }
 
+  applyViewport();
   render();
   sizeStage();
   requestDraw();
-  setTimeout(sizeStage, 300);
+  setTimeout(function () { applyViewport(); sizeStage(); }, 300);
 })();

@@ -13,8 +13,8 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="stylesheet" href="./styles.css?v=6">
-<link rel="stylesheet" href="./fonts.css?v=6">
+<link rel="stylesheet" href="./styles.css?v=11">
+<link rel="stylesheet" href="./fonts.css?v=11">
 <link rel="preload" as="font" type="font/woff2" href="./fonts/anton-400-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="./fonts/space-grotesk-400-latin.woff2" crossorigin>
 </head>
@@ -22,7 +22,7 @@
 
 <div class="app" id="app">
 
-  <header class="topbar">
+  <header class="topbar" id="topbar">
     <div class="mark" aria-hidden="true">V</div>
     <div class="wordmark">
       <b>CLIP CAPTIONER</b>
@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div class="transport">
+    <div class="transport" id="transport">
       <button class="play" id="playBtn" aria-label="Play or pause" disabled>&#9654;</button>
       <span class="clock" id="clock">0:00.0 / 0:00.0</span>
       <div class="timeline" id="timeline" role="slider" aria-label="Sequence position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
@@ -64,9 +64,15 @@
 
   <div class="sheet" id="sheet">
     <div class="sheet-head">
-      <h2 id="sheetTitle">Style</h2>
-      <button class="sheet-grow" id="sheetGrow" aria-label="Make this panel taller" aria-pressed="false">&#9650;</button>
-      <button class="sheet-close" id="sheetClose" aria-label="Close panel">&times;</button>
+      <div class="grab" id="sheetGrab" role="separator" aria-label="Drag to resize panel" tabindex="0"><i></i></div>
+      <h2 id="sheetTitle" class="sr">Panel</h2>
+      <div class="sheet-row">
+        <button class="minibtn" id="miniPlay" aria-label="Play or pause">&#9654;</button>
+        <span class="miniclock" id="miniClock">0:00</span>
+        <div class="minibar" id="miniBar" role="slider" aria-label="Position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><i id="miniFill"></i></div>
+        <button class="sheet-grow" id="sheetGrow" aria-label="Make this panel taller" aria-pressed="false">&#9650;</button>
+        <button class="sheet-close" id="sheetClose" aria-label="Close panel">&times;</button>
+      </div>
     </div>
     <div class="sheet-body">
 
@@ -251,10 +257,10 @@
 
 </div>
 
-<script src="./store.js?v=6"></script>
-<script src="./autocut.js?v=6"></script>
-<script src="./captions-engine.js?v=6"></script>
-<script src="./mp4-export.js?v=6"></script>
-<script src="./app.js?v=6"></script>
+<script src="./store.js?v=11"></script>
+<script src="./autocut.js?v=11"></script>
+<script src="./captions-engine.js?v=11"></script>
+<script src="./mp4-export.js?v=11"></script>
+<script src="./app.js?v=11"></script>
 </body>
 </html>

@@ -13,8 +13,8 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="stylesheet" href="./styles.css?v=12">
-<link rel="stylesheet" href="./fonts.css?v=12">
+<link rel="stylesheet" href="./styles.css?v=13">
+<link rel="stylesheet" href="./fonts.css?v=13">
 <link rel="preload" as="font" type="font/woff2" href="./fonts/anton-400-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="./fonts/space-grotesk-400-latin.woff2" crossorigin>
 </head>
@@ -264,6 +264,15 @@
           <div class="chips" id="bodyFonts"></div>
           <button class="btn ghost" id="resetBrand" style="margin-top:18px;">Reset brand kit</button>
         </section>
+        <section class="grp">
+          <span class="lbl">Live copywriting (optional)</span>
+          <p class="hint" style="margin-top:0;">Everything works without this. Paste a free Google AI Studio key and "Write the words" will generate fresh copy instead of drawing on the built-in bank. The key is stored only in this browser, and your event details are sent to Google when you use it. Leave it empty to stay fully offline.</p>
+          <label class="field" style="margin-top:12px;">
+            <span>API key</span>
+            <input type="password" id="aiKey" placeholder="Leave empty for offline copy" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          </label>
+          <button class="btn ghost" id="clearKey">Remove key</button>
+        </section>
       </div>
 
     </div>
@@ -279,11 +288,11 @@
 
 </div>
 
-<script src="./store.js?v=12"></script>
-<script src="./autocut.js?v=12"></script>
-<script src="./copy.js?v=12"></script>
-<script src="./captions-engine.js?v=12"></script>
-<script src="./mp4-export.js?v=12"></script>
-<script src="./app.js?v=12"></script>
+<script src="./store.js?v=13"></script>
+<script src="./autocut.js?v=13"></script>
+<script src="./copy.js?v=13"></script>
+<script src="./captions-engine.js?v=13"></script>
+<script src="./mp4-export.js?v=13"></script>
+<script src="./app.js?v=13"></script>
 </body>
 </html>

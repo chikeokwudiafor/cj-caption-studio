@@ -29,6 +29,62 @@
   }
   function saveEvent(e) { try { localStorage.setItem(EV_KEY, JSON.stringify(e)); } catch (x) {} }
 
+  // Optional and never required: the copy pack is the baseline, this is an upgrade.
+  var KEY_KEY = 'villagepgh-ai-key';
+  function loadKey() { try { return localStorage.getItem(KEY_KEY) || ''; } catch (e) { return ''; } }
+  function saveKey(v) {
+    try { v ? localStorage.setItem(KEY_KEY, v) : localStorage.removeItem(KEY_KEY); } catch (e) {}
+  }
+
+  // Ask Gemini for the same shape the copy pack produces, so callers cannot tell
+  // the difference and a failure can fall straight back to the bank.
+  function aiWrite(profile, mode, slots) {
+    var key = loadKey();
+    if (!key) return Promise.reject(new Error('no key'));
+    var prompt = [
+      'You write short on-screen text for social videos for a Pittsburgh event promoter.',
+      'Voice: ALL CAPS, short, punchy, declarative, confident. Middle dots between facts.',
+      'Never invent facts that are not given. Never add hashtags, emoji or quotation marks.',
+      mode === 'recap'
+        ? 'These clips recap an event that already happened. Use past tense.'
+        : 'These clips promote an event coming up. Use future tense and drive to tickets.',
+      '',
+      'EVENT DETAILS:',
+      JSON.stringify(profile, null, 1),
+      '',
+      'Return ONLY a JSON array with exactly ' + slots.length + ' objects, in order, matching these shapes:',
+      JSON.stringify(slots, null, 1),
+      'Each object must have exactly the keys shown for its template. Values are strings.'
+    ].join('\n');
+
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' +
+              encodeURIComponent(key);
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, 20000);
+
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ctl.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 1.0, responseMimeType: 'application/json' }
+      })
+    }).then(function (r) {
+      clearTimeout(timer);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      var txt = j && j.candidates && j.candidates[0] && j.candidates[0].content &&
+                j.candidates[0].content.parts && j.candidates[0].content.parts[0] &&
+                j.candidates[0].content.parts[0].text;
+      if (!txt) throw new Error('empty reply');
+      var arr = JSON.parse(txt);
+      if (!Array.isArray(arr) || arr.length !== slots.length) throw new Error('wrong shape');
+      return arr;
+    }).catch(function (e) { clearTimeout(timer); throw e; });
+  }
+
   function loadBrand() {
     try {
       var raw = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
@@ -46,7 +102,7 @@
     brand: loadBrand(),
     quality: 'high', format: null, scope: 'one', safe: false,
     targetLen: 30, vibe: 'hype', building: false, analyses: {}, undoSnapshot: null,
-    mode: 'recap', roll: 0, event: loadEvent(), wordsSnapshot: null,
+    mode: 'recap', roll: 0, event: loadEvent(), wordsSnapshot: null, writing: false,
     exporting: false, pct: 0, fast: null,
     exportUrl: null, exportName: '', exportSize: '',
     tab: null
@@ -65,7 +121,7 @@
    'trimLbl','trimbar','cutL','cutR','keepBox','trimPh','trimL','trimR','setStart','setEnd','splitBtn','resetTrim',
    'moveL','moveR','removeClip','startOver',
    'scopeChips','formatGrp','formatChips','qualityChips','exportBtn','exportProgress','exportBar','exportPctText','exportDl','saveHint','formatNote',
-   'cBlack','cGold','cAccent','bHandles','headFonts','bodyFonts','resetBrand'
+   'cBlack','cGold','cAccent','bHandles','headFonts','bodyFonts','resetBrand','aiKey','clearKey'
   ].forEach(function (k) { el[k] = $(k); });
 
   var video = el.video, canvas = el.canvas, ctx = canvas.getContext('2d');
@@ -883,7 +939,8 @@
     EV_FIELDS.forEach(function (f) {
       if (document.activeElement !== el[f[0]]) el[f[0]].value = state.event[f[1]] || '';
     });
-    el.writeBtn.disabled = !state.clips.length;
+    el.writeBtn.disabled = !state.clips.length || state.writing;
+    el.writeBtn.textContent = state.writing ? 'WRITING…' : 'WRITE THE WORDS';
     el.rerollBtn.hidden = !state.wordsSnapshot;
     el.undoWords.hidden = !state.wordsSnapshot;
     el.writeNote.textContent = eventFilled()
@@ -895,6 +952,8 @@
       if (document.activeElement !== el[p[0]]) el[p[0]].value = brand[p[1]];
     });
     if (document.activeElement !== el.bHandles) el.bHandles.value = brand.handles;
+    if (document.activeElement !== el.aiKey) el.aiKey.value = loadKey();
+    el.clearKey.hidden = !loadKey();
     fill(el.headFonts, FONTS_HEAD.map(function (n) {
       return chipButton(n, brand.headFont === n, function () { setBrand({ headFont: n }); }, { font: n });
     }));
@@ -1241,20 +1300,56 @@
     if (reroll) state.roll += 1;
 
     var gen = window.CopyPack.generate(state.event, state.mode, state.roll);
-    list.forEach(function (c, i) {
+    var plan = list.map(function (c, i) {
       var id = gen.templateFor(i, list.length);
-      c.template = id;
-      c.templates = [id];
-      var byTpl = Object.assign({}, c.valsByTpl);
-      byTpl[id] = gen.valsFor(id, i);
-      c.valsByTpl = byTpl;
+      return { clip: c, id: id, vals: gen.valsFor(id, i) };
     });
 
-    fieldsSig = '';
-    render();
-    requestDraw();
-    toast(reroll ? 'New wording across ' + list.length + ' clips.'
-                 : 'Words written across ' + list.length + ' clips. Tap Text to edit any of them.');
+    var apply = function (vals, viaAi) {
+      plan.forEach(function (p, i) {
+        p.clip.template = p.id;
+        p.clip.templates = [p.id];
+        var byTpl = Object.assign({}, p.clip.valsByTpl);
+        byTpl[p.id] = vals[i];
+        p.clip.valsByTpl = byTpl;
+      });
+      fieldsSig = '';
+      render();
+      requestDraw();
+      toast((reroll ? 'New wording across ' : 'Words written across ') + list.length +
+            ' clips' + (viaAi ? '' : '') + '. Tap Text to edit any of them.');
+    };
+
+    if (loadKey()) {
+      state.writing = true;
+      render();
+      var slots = plan.map(function (p) {
+        var shape = {};
+        Object.keys(p.vals).forEach(function (k) { shape[k] = ''; });
+        return { template: p.id, fields: shape };
+      });
+      aiWrite(state.event, state.mode, slots).then(function (arr) {
+        var vals = arr.map(function (row, i) {
+          var got = row && (row.fields || row);
+          var out = {};
+          // Keep the pack's value for anything the model left out.
+          Object.keys(plan[i].vals).forEach(function (k) {
+            out[k] = (got && typeof got[k] === 'string' && got[k].trim()) ? got[k].trim() : plan[i].vals[k];
+          });
+          return out;
+        });
+        apply(vals, true);
+      }).catch(function (e) {
+        apply(plan.map(function (p) { return p.vals; }), false);
+        toast('Live copy did not work (' + (e && e.message) + ') — used the built-in bank instead.');
+      }).then(function () {
+        state.writing = false;
+        render();
+      });
+      return;
+    }
+
+    apply(plan.map(function (p) { return p.vals; }), false);
   }
 
   // ---------------------------------------------------------------- events
@@ -1623,6 +1718,10 @@
   el.cGold.addEventListener('input', function () { setBrand({ gold: el.cGold.value }); });
   el.cAccent.addEventListener('input', function () { setBrand({ accent: el.cAccent.value }); });
   el.bHandles.addEventListener('input', function () { setBrand({ handles: el.bHandles.value }); });
+  el.aiKey.addEventListener('input', function () { saveKey(el.aiKey.value.trim()); el.clearKey.hidden = !el.aiKey.value.trim(); });
+  el.clearKey.addEventListener('click', function () {
+    saveKey(''); el.aiKey.value = ''; render(); toast('Key removed. Copy stays offline.');
+  });
   el.resetBrand.addEventListener('click', function () {
     state.brand = Object.assign({}, DEF_BRAND);
     saveBrand(state.brand);

@@ -1,16 +1,16 @@
 /* Offline cache. Bump CACHE when any listed file changes. */
-const CACHE = 'captioner-v12';
+const CACHE = 'captioner-v13';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=12',
-  './fonts.css?v=12',
-  './store.js?v=12',
-  './autocut.js?v=12',
-  './copy.js?v=12',
-  './captions-engine.js?v=12',
-  './mp4-export.js?v=12',
-  './app.js?v=12',
+  './styles.css?v=13',
+  './fonts.css?v=13',
+  './store.js?v=13',
+  './autocut.js?v=13',
+  './copy.js?v=13',
+  './captions-engine.js?v=13',
+  './mp4-export.js?v=13',
+  './app.js?v=13',
   './manifest.webmanifest',
   './icon.svg',
   './icon-180.png',
